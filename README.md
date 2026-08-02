@@ -40,7 +40,10 @@ const client = new WalletClient({ tokenProvider: () => source.token() })
 ## Getting credentials
 
 Run `pnpm login:telegram` once to complete an interactive Telegram sign-in and print a session string for
-`WALLET_TG_SESSION`.
+`WALLET_TG_SESSION`. This is the supported path, and it keeps the client supplied with fresh tokens.
+
+`WALLET_TOKEN` is the alternative: the raw value of the `Authorization` header that an authenticated Wallet
+session sends to `walletbot.me`. Supply it yourself if you already have one.
 
 Both the session string and the token grant access to the account. Keep them out of version control; the
 example scripts read them from `.env`.
