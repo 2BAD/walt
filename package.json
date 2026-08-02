@@ -68,7 +68,7 @@
     "test:unit": "vitest run unit --coverage"
   },
   "dependencies": {
-    "telegram": "2.26.22"
+    "teleproto": "1.228.4"
   },
   "devDependencies": {
     "@2bad/axiom": "2.1.0",

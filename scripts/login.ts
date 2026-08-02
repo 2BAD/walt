@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
-import { TelegramClient } from 'telegram'
-import { StringSession } from 'telegram/sessions/index.js'
+import { TelegramClient } from 'teleproto'
+import { StringSession } from 'teleproto/sessions/index.js'
 
 const apiId = Number(process.env['TG_API_ID'])
 const apiHash = process.env['TG_API_HASH']

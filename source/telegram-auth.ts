@@ -1,5 +1,5 @@
-import { TelegramClient, Api } from 'telegram'
-import { StringSession } from 'telegram/sessions/index.js'
+import { Api, TelegramClient } from 'teleproto'
+import { StringSession } from 'teleproto/sessions/index.js'
 
 const BASE_URL = 'https://walletbot.me'
 const EXPIRY_SKEW_MS = 30_000

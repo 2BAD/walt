@@ -9,7 +9,7 @@ const telegram = vi.hoisted(() => ({
   disconnect: vi.fn<() => Promise<void>>()
 }))
 
-vi.mock('telegram', () => ({
+vi.mock('teleproto', () => ({
   TelegramClient: class {
     connected = false
     connect = telegram.connect
@@ -19,7 +19,7 @@ vi.mock('telegram', () => ({
   Api: { messages: { RequestWebView: vi.fn<(params: Record<string, unknown>) => void>() } }
 }))
 
-vi.mock('telegram/sessions/index.js', () => ({ StringSession: vi.fn<(session: string) => void>() }))
+vi.mock('teleproto/sessions/index.js', () => ({ StringSession: vi.fn<(session: string) => void>() }))
 
 const authPayload = (overrides: Record<string, unknown> = {}) => ({
   jwt: 'jwt-one',
