@@ -1,6 +1,6 @@
 import { WalletClient } from '@2bad/wallet'
 
-const token = process.env.WALLET_TOKEN
+const token = process.env['WALLET_TOKEN']
 if (!token) {
   console.error('Set WALLET_TOKEN to the Authorization header value from an authenticated Wallet session.')
   process.exit(1)

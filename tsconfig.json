@@ -1,6 +1,6 @@
 {
   "extends": "@2bad/tsconfig",
-  "include": ["source/**/*", "vitest.config.ts"],
+  "include": ["source/**/*", "examples/**/*", "scripts/**/*", "vitest.config.ts"],
   "compilerOptions": {
     "outDir": "build",
     "types": ["node"],
@@ -8,7 +8,8 @@
     "emitDeclarationOnly": true,
     "allowImportingTsExtensions": true,
     "paths": {
-      "~/*": ["./source/*"]
+      "~/*": ["./source/*"],
+      "@2bad/wallet": ["./source/index.ts"]
     }
   }
 }

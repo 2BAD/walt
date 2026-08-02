@@ -39,7 +39,7 @@ const client = new WalletClient({ tokenProvider: () => source.token() })
 
 ## Getting credentials
 
-Run `pnpm login` once to complete an interactive Telegram sign-in and print a session string for
+Run `pnpm login:telegram` once to complete an interactive Telegram sign-in and print a session string for
 `WALLET_TG_SESSION`.
 
 Both the session string and the token grant access to the account. Keep them out of version control; the
@@ -54,7 +54,7 @@ pnpm test:unit        # unit tests with coverage
 pnpm test:integration # integration tests with coverage
 pnpm check            # lint + format check
 pnpm fix              # auto-fix lint + formatting
-pnpm login            # interactive Telegram sign-in, prints a session string
+pnpm login:telegram   # interactive Telegram sign-in, prints a session string
 pnpm example          # print a portfolio using WALLET_TOKEN
 pnpm example:auto     # print a portfolio using a Telegram session
 ```

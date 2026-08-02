@@ -61,7 +61,7 @@ export class WalletAuthError extends Error {}
 export class WalletClient {
   private readonly baseUrl: string
   private readonly fetchImpl: typeof fetch
-  private readonly tokenProvider?: () => Promise<string>
+  private readonly tokenProvider: (() => Promise<string>) | undefined
   private token: string | null
 
   constructor(options: WalletClientOptions) {

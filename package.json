@@ -54,10 +54,11 @@
     "check": "run-p check:**",
     "check:code": "oxlint ./source",
     "check:format": "oxfmt --check ./source ./examples ./scripts",
+    "check:types": "tsc --noEmit",
     "fix": "run-p fix:**",
     "fix:code": "oxlint --fix ./source",
     "fix:format": "oxfmt ./source ./examples ./scripts",
-    "login": "node --env-file-if-exists=.env scripts/login.ts",
+    "login:telegram": "node --env-file-if-exists=.env scripts/login.ts",
     "example": "run-s build && node --env-file-if-exists=.env examples/portfolio.ts",
     "example:auto": "run-s build && node --env-file-if-exists=.env examples/portfolio-auto.ts",
     "prepublishOnly": "run-s build",
@@ -83,12 +84,12 @@
     "typescript": "7.0.2",
     "vitest": "4.1.10"
   },
-  "packageManager": "pnpm@11.8.0",
+  "packageManager": "pnpm@11.17.0",
   "engines": {
     "node": ">=26"
   },
   "volta": {
-    "node": "26.4.0",
-    "pnpm": "11.8.0"
+    "node": "26.5.0",
+    "pnpm": "11.17.0"
   }
 }

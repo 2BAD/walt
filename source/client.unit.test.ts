@@ -10,7 +10,7 @@ const makeClient = (fetchImpl: FetchMock) => new WalletClient({ token: 'jwt.toke
 
 const authHeaderOf = (fetchImpl: FetchMock, call = 0) => {
   const [, options] = fetchImpl.mock.calls[call] ?? []
-  return (options?.headers as Record<string, string> | undefined)?.authorization
+  return (options?.headers as Record<string, string> | undefined)?.['authorization']
 }
 
 describe('walletClient', () => {
@@ -107,7 +107,7 @@ describe('walletClient', () => {
     const tokens = ['stale', 'fresh']
     const tokenProvider = vi.fn<() => Promise<string>>(async () => tokens.shift() ?? 'fresh')
     const fetchImpl = vi.fn<typeof fetch>(async (_url, options) => {
-      const auth = (options?.headers as Record<string, string> | undefined)?.authorization
+      const auth = (options?.headers as Record<string, string> | undefined)?.['authorization']
       return auth === 'fresh' ? jsonResponse({ accounts: [] }) : jsonResponse({ code: 'token_corrupted' }, 401)
     })
 

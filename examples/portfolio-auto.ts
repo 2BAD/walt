@@ -1,8 +1,8 @@
 import { TelegramTokenSource, WalletClient } from '@2bad/wallet'
 
-const session = process.env.WALLET_TG_SESSION
-const apiId = Number(process.env.TG_API_ID)
-const apiHash = process.env.TG_API_HASH
+const session = process.env['WALLET_TG_SESSION']
+const apiId = Number(process.env['TG_API_ID'])
+const apiHash = process.env['TG_API_HASH']
 if (!session || !apiId || !apiHash) {
   console.error('Set WALLET_TG_SESSION, TG_API_ID, TG_API_HASH (run scripts/login.ts once for the session).')
   process.exit(1)
