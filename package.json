@@ -1,0 +1,94 @@
+{
+  "name": "@2bad/wallet",
+  "version": "0.1.0",
+  "description": "Read-only client for the Telegram Wallet API to track a crypto portfolio",
+  "keywords": [
+    "telegram",
+    "wallet",
+    "crypto",
+    "portfolio"
+  ],
+  "homepage": "https://github.com/2BAD/wallet#readme",
+  "bugs": {
+    "url": "https://github.com/2BAD/wallet/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/2BAD/wallet.git"
+  },
+  "license": "MIT",
+  "author": "2BAD (https://github.com/2BAD)",
+  "contributors": [
+    {
+      "name": "Jason Hyde",
+      "email": "github@2bad.me",
+      "url": "https://github.com/mrhyde"
+    }
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./build/index.d.ts",
+        "default": "./build/index.js"
+      }
+    },
+    "./client": {
+      "import": {
+        "types": "./build/client.d.ts",
+        "default": "./build/client.js"
+      }
+    },
+    "./telegram-auth": {
+      "import": {
+        "types": "./build/telegram-auth.d.ts",
+        "default": "./build/telegram-auth.js"
+      }
+    }
+  },
+  "files": [
+    "build"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "check": "run-p check:**",
+    "check:code": "oxlint ./source",
+    "check:format": "oxfmt --check ./source ./examples ./scripts",
+    "fix": "run-p fix:**",
+    "fix:code": "oxlint --fix ./source",
+    "fix:format": "oxfmt ./source ./examples ./scripts",
+    "login": "node --env-file-if-exists=.env scripts/login.ts",
+    "example": "run-s build && node --env-file-if-exists=.env examples/portfolio.ts",
+    "example:auto": "run-s build && node --env-file-if-exists=.env examples/portfolio-auto.ts",
+    "prepublishOnly": "run-s build",
+    "preversion": "run-s check test build",
+    "test": "vitest run",
+    "test:integration": "vitest run integration --coverage",
+    "test:unit": "vitest run unit --coverage"
+  },
+  "dependencies": {
+    "telegram": "2.26.22"
+  },
+  "devDependencies": {
+    "@2bad/axiom": "2.0.0",
+    "@2bad/tsconfig": "4.0.0",
+    "@arethetypeswrong/cli": "0.18.5",
+    "@types/node": "26.1.2",
+    "@vitest/coverage-v8": "4.1.10",
+    "npm-run-all2": "9.0.3",
+    "oxfmt": "0.61.0",
+    "oxlint": "1.76.0",
+    "publint": "0.3.22",
+    "tsdown": "0.22.14",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  },
+  "packageManager": "pnpm@11.8.0",
+  "engines": {
+    "node": ">=26"
+  },
+  "volta": {
+    "node": "26.4.0",
+    "pnpm": "11.8.0"
+  }
+}
