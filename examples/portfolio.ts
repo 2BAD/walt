@@ -1,4 +1,7 @@
-import { TelegramTokenSource, WalletClient } from '@2bad/wallet'
+import { readFile, writeFile } from 'node:fs/promises'
+import { type TokenState, TelegramTokenSource, WalletClient } from '@2bad/wallet'
+
+const CACHE_FILE = '.wallet-token.json'
 
 const session = process.env['WALLET_TG_SESSION']
 const apiId = Number(process.env['TG_API_ID'])
@@ -8,7 +11,18 @@ if (!session || !apiId || !apiHash) {
   process.exit(1)
 }
 
-const source = new TelegramTokenSource({ session, apiId, apiHash })
+const storage = {
+  load: async (): Promise<TokenState | null> => {
+    try {
+      return JSON.parse(await readFile(CACHE_FILE, 'utf8')) as TokenState
+    } catch {
+      return null
+    }
+  },
+  save: (state: TokenState): Promise<void> => writeFile(CACHE_FILE, JSON.stringify(state), { mode: 0o600 })
+}
+
+const source = new TelegramTokenSource({ session, apiId, apiHash, storage })
 const client = new WalletClient({ tokenProvider: () => source.token() })
 
 const { entries, total, fiatCurrency } = await client.portfolio()

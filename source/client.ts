@@ -62,6 +62,7 @@ export class WalletClient {
   private readonly fetchImpl: typeof fetch
   private readonly tokenProvider: () => Promise<string>
   private token: string | null = null
+  private pending: Promise<string> | null = null
 
   constructor(options: WalletClientOptions) {
     if (!options.tokenProvider) {
@@ -74,8 +75,18 @@ export class WalletClient {
 
   private async ensureToken(): Promise<string> {
     if (this.token) return this.token
-    this.token = (await this.tokenProvider()).replace(/^Bearer\s+/i, '')
-    return this.token
+    this.pending ??= this.mintToken()
+    try {
+      return await this.pending
+    } finally {
+      this.pending = null
+    }
+  }
+
+  private async mintToken(): Promise<string> {
+    const token = (await this.tokenProvider()).replace(/^Bearer\s+/i, '')
+    this.token = token
+    return token
   }
 
   private async get<T>(path: string, allowRefresh = true): Promise<T> {

@@ -1,4 +1,6 @@
+import { errors } from 'teleproto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { TokenState, TokenStorage } from '~/telegram-auth.ts'
 import { TelegramTokenSource } from '~/telegram-auth.ts'
 
 const telegram = vi.hoisted(() => ({
@@ -16,7 +18,17 @@ vi.mock('teleproto', () => ({
     invoke = telegram.invoke
     disconnect = telegram.disconnect
   },
-  Api: { messages: { RequestWebView: vi.fn<(params: Record<string, unknown>) => void>() } }
+  Api: { messages: { RequestWebView: vi.fn<(params: Record<string, unknown>) => void>() } },
+  errors: {
+    FloodWaitError: class FloodWaitError extends Error {
+      seconds: number
+
+      constructor(args: { request: unknown; capture?: number | null }) {
+        super(`FLOOD_WAIT_${args.capture}`)
+        this.seconds = args.capture ?? 0
+      }
+    }
+  }
 }))
 
 vi.mock('teleproto/sessions/index.js', () => ({ StringSession: vi.fn<(session: string) => void>() }))
@@ -33,8 +45,19 @@ const authPayload = (overrides: Record<string, unknown> = {}) => ({
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
-const makeSource = (fetchImpl: typeof fetch) =>
-  new TelegramTokenSource({ session: 'session-string', apiId: 1234, apiHash: 'hash', fetch: fetchImpl })
+const makeSource = (fetchImpl: typeof fetch, extra: Partial<{ storage: TokenStorage; deviceSerial: string }> = {}) =>
+  new TelegramTokenSource({ session: 'session-string', apiId: 1234, apiHash: 'hash', fetch: fetchImpl, ...extra })
+
+const memoryStorage = (initial: TokenState | null = null) => {
+  let state = initial
+  return {
+    load: vi.fn<TokenStorage['load']>(async () => state),
+    save: vi.fn<TokenStorage['save']>(async (next) => {
+      state = next
+    }),
+    current: () => state
+  }
+}
 
 const pathsOf = (fetchImpl: ReturnType<typeof vi.fn<typeof fetch>>) =>
   fetchImpl.mock.calls.map(([url]) => new URL(String(url)).pathname)
@@ -161,5 +184,98 @@ describe('telegramTokenSource', () => {
     await makeSource(vi.fn<typeof fetch>()).disconnect()
 
     expect(telegram.disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  it('collapses concurrent token requests into one authentication', async () => {
+    expect.assertions(3)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(authPayload()))
+    const source = makeSource(fetchImpl)
+
+    const tokens = await Promise.all([source.token(), source.token(), source.token()])
+
+    expect(tokens).toStrictEqual(['jwt-one', 'jwt-one', 'jwt-one'])
+    expect(telegram.invoke).toHaveBeenCalledTimes(1)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('persists the token state after authenticating', async () => {
+    expect.assertions(2)
+
+    const storage = memoryStorage()
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(authPayload()))
+    await makeSource(fetchImpl, { storage, deviceSerial: 'web:fixed' }).token()
+
+    expect(storage.save).toHaveBeenCalledTimes(1)
+    expect(storage.current()).toStrictEqual({
+      jwt: 'jwt-one',
+      refreshToken: 'refresh-one',
+      sessionId: 'session-one',
+      expiresAt: Date.now() + 300_000,
+      deviceSerial: 'web:fixed'
+    })
+  })
+
+  it('restores a still-valid token from storage without touching telegram', async () => {
+    expect.assertions(3)
+
+    const storage = memoryStorage({
+      jwt: 'jwt-stored',
+      refreshToken: 'refresh-stored',
+      sessionId: 'session-stored',
+      expiresAt: Date.now() + 300_000,
+      deviceSerial: 'web:stored'
+    })
+    const fetchImpl = vi.fn<typeof fetch>()
+
+    expect(await makeSource(fetchImpl, { storage }).token()).toBe('jwt-stored')
+    expect(telegram.invoke).not.toHaveBeenCalled()
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('refreshes an expired stored token using the persisted device serial', async () => {
+    expect.assertions(2)
+
+    const storage = memoryStorage({
+      jwt: 'jwt-stale',
+      refreshToken: 'refresh-stored',
+      sessionId: 'session-stored',
+      expiresAt: Date.now() - 1,
+      deviceSerial: 'web:stored'
+    })
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(authPayload({ jwt: 'jwt-renewed' })))
+
+    expect(await makeSource(fetchImpl, { storage }).token()).toBe('jwt-renewed')
+
+    const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body)) as Record<string, unknown>
+
+    expect(body).toStrictEqual({
+      session_id: 'session-stored',
+      refresh_token: 'refresh-stored',
+      device_serial: 'web:stored'
+    })
+  })
+
+  it('waits out a short FLOOD_WAIT and retries once', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(authPayload()))
+    telegram.invoke.mockRejectedValueOnce(new errors.FloodWaitError({ request: null, capture: 5 }))
+
+    const pending = makeSource(fetchImpl).token()
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(await pending).toBe('jwt-one')
+    expect(telegram.invoke).toHaveBeenCalledTimes(2)
+  })
+
+  it('refuses to wait out a FLOOD_WAIT longer than the budget', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>()
+    telegram.invoke.mockRejectedValueOnce(new errors.FloodWaitError({ request: null, capture: 3600 }))
+
+    await expect(makeSource(fetchImpl).token()).rejects.toThrow('telegram rate limited for 3600s')
+    expect(telegram.invoke).toHaveBeenCalledTimes(1)
   })
 })

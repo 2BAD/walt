@@ -117,6 +117,19 @@ describe('walletClient', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 
+  it('asks the provider once for concurrent requests with no cached token', async () => {
+    expect.assertions(2)
+
+    const tokenProvider = vi.fn<() => Promise<string>>(async () => 'jwt.token.value')
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
+    const client = new WalletClient({ tokenProvider, fetch: fetchImpl })
+
+    await Promise.all([client.accounts(), client.accounts(), client.accounts()])
+
+    expect(tokenProvider).toHaveBeenCalledTimes(1)
+    expect(fetchImpl).toHaveBeenCalledTimes(3)
+  })
+
   it('gives up after a single refresh attempt', async () => {
     expect.assertions(2)
 

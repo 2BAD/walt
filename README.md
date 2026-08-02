@@ -29,7 +29,30 @@ const { entries, total, fiatCurrency } = await client.portfolio()
 
 `TelegramTokenSource` renews the token 30s before it expires, preferring its refresh token and falling back to
 a full re-authentication. `WalletClient` caches whatever it is handed, drops it and retries once on a 401, and
-throws `WalletAuthError` if the second attempt is rejected too.
+throws `WalletAuthError` if the second attempt is rejected too. Both collapse concurrent callers onto a single
+in-flight authentication, so fanning out requests with a cold cache costs one sign-in rather than one each.
+
+Without `storage` the token lives only in memory, so every process start re-authenticates over MTProto. Pass
+one to survive restarts:
+
+```ts
+const source = new TelegramTokenSource({
+  session,
+  apiId,
+  apiHash,
+  storage: {
+    load: async () => JSON.parse(await readFile(cacheFile, 'utf8')) as TokenState,
+    save: (state) => writeFile(cacheFile, JSON.stringify(state), { mode: 0o600 })
+  }
+})
+```
+
+That persists the token, refresh token, session id and `deviceSerial` together, so a restart reuses a valid
+token outright, or refreshes without a Telegram round trip. Treat the file like `.env`: it holds live
+credentials. See `examples/portfolio.ts` for a working version.
+
+If `RequestWebView` returns `FLOOD_WAIT`, the source waits and retries once when the delay is under
+`maxFloodWaitMs` (default 60s), and throws otherwise rather than sleeping for hours.
 
 Any `() => Promise<string>` works as a `tokenProvider`, so you can supply tokens another way. Bear in mind a
 static token has no way to renew itself, and the client will throw once it expires.
