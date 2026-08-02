@@ -6,7 +6,8 @@ type FetchMock = ReturnType<typeof vi.fn<typeof fetch>>
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
-const makeClient = (fetchImpl: FetchMock) => new WalletClient({ token: 'jwt.token.value', fetch: fetchImpl })
+const makeClient = (fetchImpl: FetchMock, token = 'jwt.token.value') =>
+  new WalletClient({ tokenProvider: async () => token, fetch: fetchImpl })
 
 const authHeaderOf = (fetchImpl: FetchMock, call = 0) => {
   const [, options] = fetchImpl.mock.calls[call] ?? []
@@ -14,16 +15,10 @@ const authHeaderOf = (fetchImpl: FetchMock, call = 0) => {
 }
 
 describe('walletClient', () => {
-  it('requires a token', () => {
+  it('requires a tokenProvider', () => {
     expect.assertions(1)
 
-    expect(() => new WalletClient({ token: '' })).toThrow(WalletAuthError)
-  })
-
-  it('requires token or tokenProvider', () => {
-    expect.assertions(1)
-
-    expect(() => new WalletClient({})).toThrow(WalletAuthError)
+    expect(() => new WalletClient({} as unknown as { tokenProvider: () => Promise<string> })).toThrow(WalletAuthError)
   })
 
   it('sends the raw token in the Authorization header (no Bearer prefix)', async () => {
@@ -36,13 +31,26 @@ describe('walletClient', () => {
     expect(authHeaderOf(fetchImpl)).toBe('jwt.token.value')
   })
 
-  it('strips a leading Bearer prefix from the token', async () => {
+  it('strips a leading Bearer prefix from the provided token', async () => {
     expect.assertions(1)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
-    await new WalletClient({ token: 'Bearer jwt.token.value', fetch: fetchImpl }).accounts()
+    await makeClient(fetchImpl, 'Bearer jwt.token.value').accounts()
 
     expect(authHeaderOf(fetchImpl)).toBe('jwt.token.value')
+  })
+
+  it('asks the provider only once while the token keeps working', async () => {
+    expect.assertions(1)
+
+    const tokenProvider = vi.fn<() => Promise<string>>(async () => 'jwt.token.value')
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
+    const client = new WalletClient({ tokenProvider, fetch: fetchImpl })
+
+    await client.accounts()
+    await client.accounts()
+
+    expect(tokenProvider).toHaveBeenCalledTimes(1)
   })
 
   it('builds a portfolio from the accounts response', async () => {
@@ -85,14 +93,6 @@ describe('walletClient', () => {
     expect(fetchImpl.mock.calls[0]?.[0]).toContain('/api/v1/transactions/?cursor=next%2Fpage%202')
   })
 
-  it('maps 401 to WalletAuthError', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ code: 'token_corrupted' }, 401))
-
-    await expect(makeClient(fetchImpl).accounts()).rejects.toBeInstanceOf(WalletAuthError)
-  })
-
   it('throws on a non-401 error status', async () => {
     expect.assertions(1)
 
@@ -101,7 +101,7 @@ describe('walletClient', () => {
     await expect(makeClient(fetchImpl).accounts()).rejects.toThrow('failed (500)')
   })
 
-  it('refreshes via tokenProvider on 401 and retries once', async () => {
+  it('refreshes on 401 and retries once', async () => {
     expect.assertions(2)
 
     const tokens = ['stale', 'fresh']

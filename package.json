@@ -60,7 +60,6 @@
     "fix:format": "oxfmt ./source ./examples ./scripts",
     "login:telegram": "node --env-file-if-exists=.env scripts/login.ts",
     "example": "run-s build && node --env-file-if-exists=.env examples/portfolio.ts",
-    "example:auto": "run-s build && node --env-file-if-exists=.env examples/portfolio-auto.ts",
     "prepublishOnly": "run-s build",
     "preversion": "run-s check test build",
     "test": "vitest run",

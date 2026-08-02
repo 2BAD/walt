@@ -1,8 +1,7 @@
 const BASE_URL = 'https://walletbot.me'
 
 export type WalletClientOptions = {
-  token?: string
-  tokenProvider?: () => Promise<string>
+  tokenProvider: () => Promise<string>
   baseUrl?: string
   fetch?: typeof fetch
 }
@@ -61,14 +60,13 @@ export class WalletAuthError extends Error {}
 export class WalletClient {
   private readonly baseUrl: string
   private readonly fetchImpl: typeof fetch
-  private readonly tokenProvider: (() => Promise<string>) | undefined
-  private token: string | null
+  private readonly tokenProvider: () => Promise<string>
+  private token: string | null = null
 
   constructor(options: WalletClientOptions) {
-    if (!options.token && !options.tokenProvider) {
-      throw new WalletAuthError('token or tokenProvider is required')
+    if (!options.tokenProvider) {
+      throw new WalletAuthError('tokenProvider is required')
     }
-    this.token = options.token ? options.token.replace(/^Bearer\s+/i, '') : null
     this.tokenProvider = options.tokenProvider
     this.baseUrl = options.baseUrl ?? BASE_URL
     this.fetchImpl = options.fetch ?? fetch
@@ -76,7 +74,6 @@ export class WalletClient {
 
   private async ensureToken(): Promise<string> {
     if (this.token) return this.token
-    if (!this.tokenProvider) throw new WalletAuthError('no token available')
     this.token = (await this.tokenProvider()).replace(/^Bearer\s+/i, '')
     return this.token
   }
@@ -87,7 +84,7 @@ export class WalletClient {
       headers: { accept: 'application/json', authorization: token }
     })
     if (response.status === 401) {
-      if (this.tokenProvider && allowRefresh) {
+      if (allowRefresh) {
         this.token = null
         return this.get<T>(path, false)
       }

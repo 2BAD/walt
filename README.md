@@ -10,17 +10,8 @@ pnpm add @2bad/wallet
 
 ## Usage
 
-With a token from an authenticated Wallet session:
-
-```ts
-import { WalletClient } from '@2bad/wallet'
-
-const client = new WalletClient({ token: process.env.WALLET_TOKEN })
-const { entries, total, fiatCurrency } = await client.portfolio()
-```
-
-To let the client mint and refresh its own tokens, hand it a `TelegramTokenSource`. It signs into the Wallet
-mini app over MTProto, so it needs a Telegram session string plus API credentials from
+`WalletClient` needs a `tokenProvider`. `TelegramTokenSource` is the one that ships with the package: it signs
+into the Wallet mini app over MTProto, so it needs a Telegram session string plus API credentials from
 [my.telegram.org](https://my.telegram.org):
 
 ```ts
@@ -33,20 +24,23 @@ const source = new TelegramTokenSource({
 })
 
 const client = new WalletClient({ tokenProvider: () => source.token() })
+const { entries, total, fiatCurrency } = await client.portfolio()
 ```
 
-`WalletClient` caches the token, retries once on a 401, and throws `WalletAuthError` when it cannot recover.
+`TelegramTokenSource` renews the token 30s before it expires, preferring its refresh token and falling back to
+a full re-authentication. `WalletClient` caches whatever it is handed, drops it and retries once on a 401, and
+throws `WalletAuthError` if the second attempt is rejected too.
+
+Any `() => Promise<string>` works as a `tokenProvider`, so you can supply tokens another way. Bear in mind a
+static token has no way to renew itself, and the client will throw once it expires.
 
 ## Getting credentials
 
 Run `pnpm login:telegram` once to complete an interactive Telegram sign-in and print a session string for
-`WALLET_TG_SESSION`. This is the supported path, and it keeps the client supplied with fresh tokens.
+`WALLET_TG_SESSION`.
 
-`WALLET_TOKEN` is the alternative: the raw value of the `Authorization` header that an authenticated Wallet
-session sends to `walletbot.me`. Supply it yourself if you already have one.
-
-Both the session string and the token grant access to the account. Keep them out of version control; the
-example scripts read them from `.env`.
+The session string grants access to the account. Keep it out of version control; the example reads it
+from `.env`.
 
 ## Scripts
 
@@ -58,8 +52,7 @@ pnpm test:integration # integration tests with coverage
 pnpm check            # lint + format check
 pnpm fix              # auto-fix lint + formatting
 pnpm login:telegram   # interactive Telegram sign-in, prints a session string
-pnpm example          # print a portfolio using WALLET_TOKEN
-pnpm example:auto     # print a portfolio using a Telegram session
+pnpm example          # print a portfolio using a Telegram session
 ```
 
 ## Project Structure
