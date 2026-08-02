@@ -71,7 +71,7 @@
     "telegram": "2.26.22"
   },
   "devDependencies": {
-    "@2bad/axiom": "2.0.0",
+    "@2bad/axiom": "2.1.0",
     "@2bad/tsconfig": "4.0.0",
     "@arethetypeswrong/cli": "0.18.5",
     "@types/node": "26.1.2",

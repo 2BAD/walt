@@ -13,8 +13,8 @@ importers:
         version: 2.26.22(supports-color@7.2.0)
     devDependencies:
       '@2bad/axiom':
-        specifier: 2.0.0
-        version: 2.0.0(oxlint@1.76.0)
+        specifier: 2.1.0
+        version: 2.1.0(oxlint@1.76.0)
       '@2bad/tsconfig':
         specifier: 4.0.0
         version: 4.0.0(typescript@7.0.2)
@@ -51,8 +51,8 @@ importers:
 
 packages:
 
-  '@2bad/axiom@2.0.0':
-    resolution: {integrity: sha512-hj/p0V4nTxWns4t8f3ofPuvVKi9CRlIdwUc6vvH2xNt5ImAse9XyqcPXf4AvcXsnwfx1PZQvjDaCk2Y52jSDZA==}
+  '@2bad/axiom@2.1.0':
+    resolution: {integrity: sha512-xDGT8eBWgSONF7Z27twAw9oP1FIXaNhb5SM5j/UqT6w0S6vWleq/dRdYrnLtS8gkM2x6iDSTAB224wMMgpbplQ==}
     engines: {node: '>=24'}
     peerDependencies:
       oxlint: '>= 1.60'
@@ -1667,7 +1667,7 @@ packages:
 
 snapshots:
 
-  '@2bad/axiom@2.0.0(oxlint@1.76.0)':
+  '@2bad/axiom@2.1.0(oxlint@1.76.0)':
     dependencies:
       oxlint: 1.76.0
 
