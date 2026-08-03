@@ -7,7 +7,7 @@ const session = process.env['WALLET_TG_SESSION']
 const apiId = Number(process.env['TG_API_ID'])
 const apiHash = process.env['TG_API_HASH']
 if (!session || !apiId || !apiHash) {
-  console.error('Set WALLET_TG_SESSION, TG_API_ID, TG_API_HASH (run `pnpm login:telegram` once for the session).')
+  console.error('Set WALLET_TG_SESSION, TG_API_ID, TG_API_HASH (run `pnpm telegram:login` once for the session).')
   process.exit(1)
 }
 

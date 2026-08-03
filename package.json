@@ -39,10 +39,10 @@
         "default": "./build/client.js"
       }
     },
-    "./telegram-auth": {
+    "./telegram/auth": {
       "import": {
-        "types": "./build/telegram-auth.d.ts",
-        "default": "./build/telegram-auth.js"
+        "types": "./build/telegram/auth.d.ts",
+        "default": "./build/telegram/auth.js"
       }
     }
   },
@@ -58,7 +58,7 @@
     "fix": "run-p fix:**",
     "fix:code": "oxlint --fix ./source",
     "fix:format": "oxfmt ./source ./examples ./scripts",
-    "login:telegram": "node --env-file-if-exists=.env scripts/login.ts",
+    "telegram:login": "node --env-file-if-exists=.env scripts/login.ts",
     "example": "run-s build && node --env-file-if-exists=.env examples/portfolio.ts",
     "prepublishOnly": "run-s build",
     "preversion": "run-s check test build",

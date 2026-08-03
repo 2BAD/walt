@@ -59,7 +59,7 @@ static token has no way to renew itself, and the client will throw once it expir
 
 ## Getting credentials
 
-Run `pnpm login:telegram` once to complete an interactive Telegram sign-in and print a session string for
+Run `pnpm telegram:login` once to complete an interactive Telegram sign-in and print a session string for
 `WALLET_TG_SESSION`.
 
 The session string grants access to the account. Keep it out of version control; the example reads it
@@ -74,7 +74,7 @@ pnpm test:unit        # unit tests with coverage
 pnpm test:integration # integration tests with coverage
 pnpm check            # lint + format check
 pnpm fix              # auto-fix lint + formatting
-pnpm login:telegram   # interactive Telegram sign-in, prints a session string
+pnpm telegram:login   # interactive Telegram sign-in, prints a session string
 pnpm example          # print a portfolio using a Telegram session
 ```
 
