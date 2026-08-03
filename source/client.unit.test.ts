@@ -93,6 +93,63 @@ describe('walletClient', () => {
     expect(fetchImpl.mock.calls[0]?.[0]).toContain('/api/v1/transactions/?cursor=next%2Fpage%202')
   })
 
+  it('requests the frozen balances endpoint', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}))
+    await makeClient(fetchImpl).frozenBalances()
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/accounts/frozen')
+  })
+
+  it('reads profit and loss from the analytics service', async () => {
+    expect.assertions(3)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({
+        positions: [{ currency: 'TON', current_value_in_fiat: '50.00', percentage_all_time: '12.5' }],
+        total: { fiat_currency: 'USD', current_value_in_fiat: '150.00', absolute_all_time: '20.00' }
+      })
+    )
+
+    const { positions, total } = await makeClient(fetchImpl).pnl()
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/customer-analytics/public-api/v1/pnl/assets/')
+    expect(positions[0]?.currency).toBe('TON')
+    expect(total.current_value_in_fiat).toBe('150.00')
+  })
+
+  it('returns the per-period series from the chart endpoint', async () => {
+    expect.assertions(3)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({
+        day: [{ rate: '5.12', timestamp: 1767225600 }],
+        week: [],
+        month: [],
+        year: [],
+        all: []
+      })
+    )
+
+    const { day } = await makeClient(fetchImpl).charts('TON', 'USD')
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/charts/TON/USD/')
+    expect(day[0]?.rate).toBe('5.12')
+    expect(day[0]?.timestamp).toBe(1767225600)
+  })
+
+  it('encodes the query for a historical price lookup', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}))
+    await makeClient(fetchImpl).priceForFiatAtTime({ crypto_currency: 'TON', at: '2026-01-01T00:00:00Z' })
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/api/v1/exchange_rates/price_for_fiat_at_time/?crypto_currency=TON&at=2026-01-01T00%3A00%3A00Z'
+    )
+  })
+
   it('throws on a non-401 error status', async () => {
     expect.assertions(1)
 

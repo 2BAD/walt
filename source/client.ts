@@ -10,8 +10,11 @@ export type Account = {
   currency: string
   account_type: string
   rate: string
+  absolute_rate_change: string
+  percent_rate_change: string
   balance_hold: string
   available_balance: string
+  available_balance_usd_amount: string
   available_balance_fiat_amount: string
   available_balance_fiat_currency: string
   has_transactions: boolean
@@ -53,6 +56,45 @@ export type PortfolioEntry = {
   currency: string
   amount: string
   fiatValue: number
+}
+
+export type ChartPoint = {
+  rate: string
+  timestamp: number
+}
+
+export type Charts = {
+  day: ChartPoint[]
+  week: ChartPoint[]
+  month: ChartPoint[]
+  year: ChartPoint[]
+  all: ChartPoint[]
+}
+
+export type PnlPosition = {
+  currency: string
+  fiat_currency: string
+  current_value_in_fiat: string
+  absolute_24h: string
+  percentage_24h: string
+  absolute_all_time: string
+  percentage_all_time: string
+  account_type: string
+  earn_campaign_name: string | null
+}
+
+export type PnlTotals = {
+  fiat_currency: string
+  current_value_in_fiat: string
+  absolute_24h: string
+  percentage_24h: string
+  absolute_all_time: string
+  percentage_all_time: string
+}
+
+export type PnlResponse = {
+  positions: PnlPosition[]
+  total: PnlTotals
 }
 
 export class WalletAuthError extends Error {}
@@ -117,6 +159,23 @@ export class WalletClient {
   transactions(cursor?: string): Promise<TransactionsPage> {
     const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
     return this.get<TransactionsPage>(`/api/v1/transactions/${query}`)
+  }
+
+  frozenBalances<T = unknown>(): Promise<T[]> {
+    return this.get<T[]>('/api/v1/accounts/frozen')
+  }
+
+  pnl(): Promise<PnlResponse> {
+    return this.get<PnlResponse>('/customer-analytics/public-api/v1/pnl/assets/')
+  }
+
+  charts(currency: string, fiatCurrency: string): Promise<Charts> {
+    return this.get<Charts>(`/api/v1/charts/${encodeURIComponent(currency)}/${encodeURIComponent(fiatCurrency)}/`)
+  }
+
+  priceForFiatAtTime<T = unknown>(query: Record<string, string | number>): Promise<T> {
+    const search = new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)])).toString()
+    return this.get<T>(`/api/v1/exchange_rates/price_for_fiat_at_time/?${search}`)
   }
 
   async portfolio(): Promise<{ entries: PortfolioEntry[]; total: number; fiatCurrency: string }> {

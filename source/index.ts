@@ -2,7 +2,12 @@ export { WalletAuthError, WalletClient } from '~/client.ts'
 export type {
   Account,
   AccountsResponse,
+  ChartPoint,
+  Charts,
   Coin,
+  PnlPosition,
+  PnlResponse,
+  PnlTotals,
   PortfolioEntry,
   Transaction,
   TransactionsPage,
