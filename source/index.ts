@@ -5,6 +5,7 @@ export type {
   ChartPoint,
   Charts,
   Coin,
+  CoinDetails,
   PnlPosition,
   PnlResponse,
   PnlTotals,

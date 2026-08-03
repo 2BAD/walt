@@ -164,6 +164,23 @@ describe('walletClient', () => {
     expect(total.current_value_in_fiat).toBe('150.00')
   })
 
+  it('fetches coin details with its 24h preview series', async () => {
+    expect.assertions(3)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({
+        currency: 'TON',
+        market_cap: null,
+        chart_preview_rate_24h: [{ timestamp: 1767225600, value: '5.12' }]
+      })
+    )
+    const details = await makeClient(fetchImpl).coinDetails('TON', 'USD')
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/coins/details/TON/USD/')
+    expect(details.market_cap).toBeNull()
+    expect(details.chart_preview_rate_24h[0]?.value).toBe('5.12')
+  })
+
   it('returns the per-period series from the chart endpoint', async () => {
     expect.assertions(3)
 

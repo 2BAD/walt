@@ -35,6 +35,25 @@ export type Coin = {
   volume24h: string
 }
 
+export type CoinDetails = {
+  currency: string
+  fiat_currency: string
+  category: string
+  description: string
+  networks: string[]
+  rate: string
+  rate_change_24h_percent: string
+  rate_change_24h_absolute: string
+  volume24h: string | null
+  volume24h_change_24h_percent: string | null
+  market_cap: string | null
+  market_cap_change_24h_percent: string | null
+  total_supply: string | null
+  circulating_supply: string | null
+  chart_preview_rate_24h: { timestamp: number; value: string }[]
+  trading_hours_state: unknown
+}
+
 export type Transaction = {
   id: number
   type: string
@@ -205,6 +224,12 @@ export class WalletClient {
 
   pnl(): Promise<PnlResponse> {
     return this.get<PnlResponse>('/customer-analytics/public-api/v1/pnl/assets/')
+  }
+
+  coinDetails(currency: string, fiatCurrency: string): Promise<CoinDetails> {
+    return this.get<CoinDetails>(
+      `/api/v1/coins/details/${encodeURIComponent(currency)}/${encodeURIComponent(fiatCurrency)}/`
+    )
   }
 
   charts(currency: string, fiatCurrency: string): Promise<Charts> {
