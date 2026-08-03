@@ -102,6 +102,51 @@ describe('walletClient', () => {
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/accounts/frozen')
   })
 
+  it('scopes transactions to one currency', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [] }))
+    await makeClient(fetchImpl).accountTransactions('TON', 20)
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/api/v1/transactions/single-account/?crypto_currency=TON&limit=20'
+    )
+  })
+
+  it('omits the limit when not given', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [] }))
+    await makeClient(fetchImpl).accountTransactions('USDT')
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/api/v1/transactions/single-account/?crypto_currency=USDT'
+    )
+  })
+
+  it('fetches a single transaction with its fee and valuation', async () => {
+    expect.assertions(3)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ id: 10000000000001, fee_amount: '0.01', local_fiat_amount: '12.00' })
+    )
+    const details = await makeClient(fetchImpl).transactionDetails(10000000000001)
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/transactions/details/10000000000001/')
+    expect(details.fee_amount).toBe('0.01')
+    expect(details.local_fiat_amount).toBe('12.00')
+  })
+
+  it('reads pending deposits', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [], size: 0 }))
+    const { size } = await makeClient(fetchImpl).unconfirmedTransactions()
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/transactions/unconfirmed/')
+    expect(size).toBe(0)
+  })
+
   it('reads profit and loss from the analytics service', async () => {
     expect.assertions(3)
 

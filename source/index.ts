@@ -10,6 +10,7 @@ export type {
   PnlTotals,
   PortfolioEntry,
   Transaction,
+  TransactionDetails,
   TransactionsPage,
   WalletClientOptions
 } from '~/client.ts'

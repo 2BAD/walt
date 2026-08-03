@@ -58,6 +58,30 @@ export type PortfolioEntry = {
   fiatValue: number
 }
 
+export type TransactionDetails = {
+  id: number
+  type: string
+  created_at: string
+  status: string
+  gateway: string
+  crypto_amount: string
+  crypto_currency: string
+  local_fiat_amount: string
+  local_fiat_amount_now: string
+  local_currency: string
+  fee_amount: string | null
+  fee_currency: string | null
+  exchange_rate: string | null
+  pair_transaction_amount: string | null
+  pair_transaction_currency: string | null
+  username: string | null
+  tg_id: number | null
+  transfer_id: string | null
+  gateway_details: unknown
+  is_blocked: boolean
+  is_cancellable: boolean
+}
+
 export type ChartPoint = {
   rate: string
   timestamp: number
@@ -159,6 +183,20 @@ export class WalletClient {
   transactions(cursor?: string): Promise<TransactionsPage> {
     const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
     return this.get<TransactionsPage>(`/api/v1/transactions/${query}`)
+  }
+
+  accountTransactions(currency: string, limit?: number): Promise<TransactionsPage> {
+    const query = new URLSearchParams({ crypto_currency: currency })
+    if (limit !== undefined) query.set('limit', String(limit))
+    return this.get<TransactionsPage>(`/api/v1/transactions/single-account/?${query.toString()}`)
+  }
+
+  transactionDetails(id: number | string): Promise<TransactionDetails> {
+    return this.get<TransactionDetails>(`/api/v1/transactions/details/${encodeURIComponent(String(id))}/`)
+  }
+
+  unconfirmedTransactions<T = unknown>(): Promise<{ transactions: T[]; size: number }> {
+    return this.get<{ transactions: T[]; size: number }>('/api/v1/transactions/unconfirmed/')
   }
 
   frozenBalances<T = unknown>(): Promise<T[]> {
