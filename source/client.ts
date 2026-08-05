@@ -126,11 +126,12 @@ export type AccountsResponse = {
 
 export type Coin = {
   currency: string
+  fiat_currency: string
   networks: string[]
   category: string
   rate: string
   rate_change_24h_percent: string
-  volume24h: string
+  volume24h: string | null
 }
 
 export type TradingHoursPeriod = {
@@ -226,6 +227,17 @@ export type Transaction = {
   currency: string
   status: string
   gateway: string
+  is_blocked: boolean
+  username: string | null
+  tg_id: number | null
+  input_addresses: string | null
+  recipient_wallet_address: string | null
+  photo_url: string | null
+  pair_transaction_currency: string | null
+  network: string | null
+  block_reason: string | null
+  crypto_tx_id: string | null
+  gateway_details: unknown
 }
 
 export type TransactionsPage = {
