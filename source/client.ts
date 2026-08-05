@@ -35,6 +35,17 @@ export type Coin = {
   volume24h: string
 }
 
+export type TradingHoursPeriod = {
+  mode: string
+  start_at: string
+  end_at: string
+}
+
+export type TradingHoursState = TradingHoursPeriod & {
+  next_mode: string
+  schedule: TradingHoursPeriod[]
+}
+
 export type CoinDetails = {
   currency: string
   fiat_currency: string
@@ -51,8 +62,63 @@ export type CoinDetails = {
   total_supply: string | null
   circulating_supply: string | null
   chart_preview_rate_24h: { timestamp: number; value: string }[]
-  trading_hours_state: unknown
+  trading_hours_state: TradingHoursState | null
 }
+
+export type TransactionGateway =
+  | 'card'
+  | 'purchase'
+  | 'internal'
+  | 'btc'
+  | 'manual'
+  | 'crypto_exchange'
+  | 'tg_transfer'
+  | 'binance'
+  | 'top_up'
+  | 'withdraw_onchain'
+  | 'fireblocks'
+  | 'single_use'
+  | 'multi_use'
+  | 'part_multi_use'
+  | 'p2p_order'
+  | 'p2p_order_inactive_offer'
+  | 'p2p_offer'
+  | 'p2p_refund'
+  | 'p2p_security_deposit'
+  | 'p2p_security_deposit_seizure'
+  | 'wpay_payment'
+  | 'wpay_payout'
+  | 'payouts'
+  | 'bonus_any'
+  | 'onboarding_incentive'
+  | 'giveaway'
+  | 'earn'
+  | 'earn_reward'
+  | 'earn_v2'
+  | 'earn_v2_reward'
+  | 'earn_v2_bonus'
+  | 'earn_v2_crypto_exchange'
+  | 'forced_transfer'
+  | 'tg_transfer_onchain'
+  | 'onramp'
+  | 'offramp'
+  | 'xstocks_dividends'
+  | 'perps'
+  | 'perps_pnl'
+  | 'perps_fee'
+  | 'perps_liquidation_fee'
+  | 'perps_fundings'
+  | 'perps_open_hold_shortfall'
+  | 'perps_margin'
+  | 'perps_bbook_insurance'
+  | 'perps_bbook_reserve'
+  | 'perps_resize_position'
+  | 'unconfirmed_deposit'
+  | 'loyalty_incentive'
+  | 'compensation'
+  | 'tg_stars_purchase'
+  | 'ipo'
+  | 'ipo_allocation'
 
 export type Transaction = {
   id: number
@@ -210,8 +276,9 @@ export class WalletClient {
     return this.get<TransactionsPage>(`/api/v1/transactions/single-account/?${query.toString()}`)
   }
 
-  transactionDetails(id: number | string): Promise<TransactionDetails> {
-    return this.get<TransactionDetails>(`/api/v1/transactions/details/${encodeURIComponent(String(id))}/`)
+  transactionDetails(id: number | string, gateway?: TransactionGateway): Promise<TransactionDetails> {
+    const query = gateway ? `?${new URLSearchParams({ transaction_gateway: gateway }).toString()}` : ''
+    return this.get<TransactionDetails>(`/api/v1/transactions/details/${encodeURIComponent(String(id))}/${query}`)
   }
 
   unconfirmedTransactions<T = unknown>(): Promise<{ transactions: T[]; size: number }> {

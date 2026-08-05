@@ -137,6 +137,17 @@ describe('walletClient', () => {
     expect(details.local_fiat_amount).toBe('12.00')
   })
 
+  it('narrows a transaction lookup to one gateway when given', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ id: 10000000000001 }))
+    await makeClient(fetchImpl).transactionDetails(10000000000001, 'crypto_exchange')
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/api/v1/transactions/details/10000000000001/?transaction_gateway=crypto_exchange'
+    )
+  })
+
   it('reads pending deposits', async () => {
     expect.assertions(2)
 

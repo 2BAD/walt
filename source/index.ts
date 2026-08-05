@@ -10,8 +10,11 @@ export type {
   PnlResponse,
   PnlTotals,
   PortfolioEntry,
+  TradingHoursPeriod,
+  TradingHoursState,
   Transaction,
   TransactionDetails,
+  TransactionGateway,
   TransactionsPage,
   WalletClientOptions
 } from '~/client.ts'
