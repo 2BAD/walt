@@ -281,8 +281,9 @@ export class WalletClient {
     return this.get<TransactionDetails>(`/api/v1/transactions/details/${encodeURIComponent(String(id))}/${query}`)
   }
 
-  unconfirmedTransactions<T = unknown>(): Promise<{ transactions: T[]; size: number }> {
-    return this.get<{ transactions: T[]; size: number }>('/api/v1/transactions/unconfirmed/')
+  unconfirmedTransactions<T = unknown>(limit?: number): Promise<{ transactions: T[]; size: number }> {
+    const query = limit === undefined ? '' : `?${new URLSearchParams({ limit: String(limit) }).toString()}`
+    return this.get<{ transactions: T[]; size: number }>(`/api/v1/transactions/unconfirmed/${query}`)
   }
 
   frozenBalances<T = unknown>(): Promise<T[]> {

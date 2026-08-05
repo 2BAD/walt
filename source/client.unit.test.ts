@@ -158,6 +158,15 @@ describe('walletClient', () => {
     expect(size).toBe(0)
   })
 
+  it('caps the pending deposit page when a limit is given', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [], size: 0 }))
+    await makeClient(fetchImpl).unconfirmedTransactions(50)
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/transactions/unconfirmed/?limit=50')
+  })
+
   it('reads profit and loss from the analytics service', async () => {
     expect.assertions(3)
 
