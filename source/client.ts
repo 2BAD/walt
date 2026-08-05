@@ -1,4 +1,31 @@
+import { randomBytes } from 'node:crypto'
+
 const BASE_URL = 'https://walletbot.me'
+
+const SENTRY_RELEASE = '10.0.74110'
+const SENTRY_PUBLIC_KEY = '544a92e441a24f17aa6b08e34e728ed2'
+
+const BROWSER_HEADERS = {
+  accept: 'application/json',
+  'accept-encoding': 'gzip, deflate, br, zstd',
+  'accept-language': 'en-US,en;q=0.9',
+  'cache-control': 'no-cache',
+  dnt: '1',
+  pragma: 'no-cache',
+  priority: 'u=1, i',
+  'sec-ch-ua': '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"Windows"',
+  'sec-fetch-dest': 'empty',
+  'sec-fetch-mode': 'cors',
+  'sec-fetch-site': 'same-origin',
+  'sec-fetch-storage-access': 'active',
+  'sec-gpc': '1',
+  'user-agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36'
+}
+
+const hex = (bytes: number): string => randomBytes(bytes).toString('hex')
 
 export type WalletClientOptions = {
   tokenProvider: () => Promise<string>
@@ -212,6 +239,9 @@ export class WalletClient {
   private readonly baseUrl: string
   private readonly fetchImpl: typeof fetch
   private readonly tokenProvider: () => Promise<string>
+  private readonly traceId = hex(16)
+  private readonly baggage: string
+  private readonly referer: string
   private token: string | null = null
   private pending: Promise<string> | null = null
 
@@ -222,6 +252,17 @@ export class WalletClient {
     this.tokenProvider = options.tokenProvider
     this.baseUrl = options.baseUrl ?? BASE_URL
     this.fetchImpl = options.fetch ?? fetch
+    this.referer = `${this.baseUrl}/main`
+    this.baggage = [
+      'sentry-environment=production',
+      `sentry-release=${SENTRY_RELEASE}`,
+      `sentry-public_key=${SENTRY_PUBLIC_KEY}`,
+      `sentry-trace_id=${this.traceId}`,
+      'sentry-transaction=%2Fwv',
+      'sentry-sampled=false',
+      `sentry-sample_rand=${Math.random()}`,
+      'sentry-sample_rate=0.01'
+    ].join(',')
   }
 
   private async ensureToken(): Promise<string> {
@@ -243,7 +284,14 @@ export class WalletClient {
   private async get<T>(path: string, allowRefresh = true): Promise<T> {
     const token = await this.ensureToken()
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-      headers: { accept: 'application/json', authorization: token }
+      headers: {
+        ...BROWSER_HEADERS,
+        authorization: token,
+        referer: this.referer,
+        baggage: this.baggage,
+        'sentry-trace': `${this.traceId}-${hex(8)}-0`,
+        traceparent: `00-${hex(16)}-${hex(8)}-01`
+      }
     })
     if (response.status === 401) {
       if (allowRefresh) {

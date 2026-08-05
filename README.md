@@ -57,6 +57,17 @@ If `RequestWebView` returns `FLOOD_WAIT`, the source waits and retries once when
 Any `() => Promise<string>` works as a `tokenProvider`, so you can supply tokens another way. Bear in mind a
 static token has no way to renew itself, and the client will throw once it expires.
 
+## Request headers
+
+Requests carry the same header set the Wallet web app sends: its `user-agent` and `sec-ch-ua` pair, the
+`sec-fetch-*` and `priority` hints, `dnt`/`sec-gpc`, a `referer` on the configured origin, and the Sentry
+tracing trio. `sentry-trace` and `traceparent` get fresh random span ids per request, with one trace id per
+client instance, the way a single browser session behaves.
+
+The Chrome version and the `sentry-release` in `baggage` are pinned constants in `source/client.ts`. They are a
+snapshot of a real session and will drift as the web app ships; re-capture and bump them if that matters to
+you.
+
 ## Getting credentials
 
 Run `pnpm telegram:login` once to complete an interactive Telegram sign-in and print a session string for

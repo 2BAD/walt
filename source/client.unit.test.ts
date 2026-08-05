@@ -9,10 +9,12 @@ const jsonResponse = (body: unknown, status = 200) =>
 const makeClient = (fetchImpl: FetchMock, token = 'jwt.token.value') =>
   new WalletClient({ tokenProvider: async () => token, fetch: fetchImpl })
 
-const authHeaderOf = (fetchImpl: FetchMock, call = 0) => {
+const headersOf = (fetchImpl: FetchMock, call = 0) => {
   const [, options] = fetchImpl.mock.calls[call] ?? []
-  return (options?.headers as Record<string, string> | undefined)?.['authorization']
+  return (options?.headers ?? {}) as Record<string, string>
 }
+
+const authHeaderOf = (fetchImpl: FetchMock, call = 0) => headersOf(fetchImpl, call)['authorization']
 
 describe('walletClient', () => {
   it('requires a tokenProvider', () => {
@@ -38,6 +40,50 @@ describe('walletClient', () => {
     await makeClient(fetchImpl, 'Bearer jwt.token.value').accounts()
 
     expect(authHeaderOf(fetchImpl)).toBe('jwt.token.value')
+  })
+
+  it('sends the browser headers the web app sends', async () => {
+    expect.assertions(4)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
+    await makeClient(fetchImpl).accounts()
+    const headers = headersOf(fetchImpl)
+
+    expect(headers['user-agent']).toContain('Chrome/150.0.0.0')
+    expect(headers['sec-fetch-site']).toBe('same-origin')
+    expect(headers['referer']).toBe('https://walletbot.me/main')
+    expect(headers['baggage']).toContain('sentry-release=10.0.74110')
+  })
+
+  it('points the referer at the configured origin', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
+    const client = new WalletClient({
+      tokenProvider: async () => 'jwt.token.value',
+      baseUrl: 'https://staging.example',
+      fetch: fetchImpl
+    })
+    await client.accounts()
+
+    expect(headersOf(fetchImpl)['referer']).toBe('https://staging.example/main')
+  })
+
+  it('keeps one trace id per client but a fresh span per request', async () => {
+    expect.assertions(4)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
+    const client = makeClient(fetchImpl)
+    await client.accounts()
+    await client.accounts()
+
+    const [first, second] = [headersOf(fetchImpl, 0), headersOf(fetchImpl, 1)]
+    const traceOf = (headers: Record<string, string>) => headers['sentry-trace']?.split('-') ?? []
+
+    expect(first['sentry-trace']).toMatch(/^[0-9a-f]{32}-[0-9a-f]{16}-0$/)
+    expect(traceOf(first)[0]).toBe(traceOf(second)[0])
+    expect(traceOf(first)[1]).not.toBe(traceOf(second)[1])
+    expect(first['traceparent']).not.toBe(second['traceparent'])
   })
 
   it('asks the provider only once while the token keeps working', async () => {
