@@ -130,13 +130,15 @@ describe('walletClient', () => {
     expect(coins[0]?.currency).toBe('BTC')
   })
 
-  it('passes an encoded cursor to the transactions endpoint', async () => {
+  it('encodes the padding in a base64 cursor', async () => {
     expect.assertions(1)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [] }))
-    await makeClient(fetchImpl).transactions('next/page 2')
+    await makeClient(fetchImpl).transactions('MTAwMDAwMDAwMDAwMDE6Tm9uZQ==')
 
-    expect(fetchImpl.mock.calls[0]?.[0]).toContain('/api/v1/transactions/?cursor=next%2Fpage%202')
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/api/v1/transactions/?cursor=MTAwMDAwMDAwMDAwMDE6Tm9uZQ%3D%3D'
+    )
   })
 
   it('requests the frozen balances endpoint', async () => {
@@ -267,14 +269,48 @@ describe('walletClient', () => {
     expect(day[0]?.timestamp).toBe(1767225600)
   })
 
-  it('encodes the query for a historical price lookup', async () => {
+  it('sends all four required parameters for a historical price lookup', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ rate: '1.656928134127' }))
+    const price = await makeClient(fetchImpl).priceForFiatAtTime('TON', 'USD', 1, '2026-01-01T00:00:00Z')
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/api/v1/exchange_rates/price_for_fiat_at_time/?crypto_currency=TON&local_currency=USD&amount=1&time=2026-01-01T00%3A00%3A00Z'
+    )
+    expect(price.rate).toBe('1.656928134127')
+  })
+
+  it('serialises a Date for a historical price lookup', async () => {
     expect.assertions(1)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}))
-    await makeClient(fetchImpl).priceForFiatAtTime({ crypto_currency: 'TON', at: '2026-01-01T00:00:00Z' })
+    await makeClient(fetchImpl).priceForFiatAtTime('TON', 'USD', 1, new Date('2026-01-01T00:00:00Z'))
 
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
-      'https://walletbot.me/api/v1/exchange_rates/price_for_fiat_at_time/?crypto_currency=TON&at=2026-01-01T00%3A00%3A00Z'
+    expect(fetchImpl.mock.calls[0]?.[0]).toContain('time=2026-01-01T00%3A00%3A00.000Z')
+  })
+
+  it('reads the local currency', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ local_currency: 'USD' }))
+    const currency = await makeClient(fetchImpl).localCurrency()
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/currencies/local_currency/')
+    expect(currency).toBe('USD')
+  })
+
+  it('pages the global and per-currency transaction lists', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [] }))
+    const client = makeClient(fetchImpl)
+    await client.transactions('cur/sor', 20)
+    await client.accountTransactions('TON', 2, 'cur/sor')
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/transactions/?cursor=cur%2Fsor&limit=20')
+    expect(fetchImpl.mock.calls[1]?.[0]).toBe(
+      'https://walletbot.me/api/v1/transactions/single-account/?crypto_currency=TON&limit=2&cursor=cur%2Fsor'
     )
   })
 

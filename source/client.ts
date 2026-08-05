@@ -33,6 +33,77 @@ export type WalletClientOptions = {
   fetch?: typeof fetch
 }
 
+export type FiatCurrency =
+  | 'USD'
+  | 'EUR'
+  | 'RUB'
+  | 'GBP'
+  | 'UAH'
+  | 'KZT'
+  | 'BYN'
+  | 'KRW'
+  | 'ILS'
+  | 'IDR'
+  | 'AED'
+  | 'GEL'
+  | 'TWD'
+  | 'TRY'
+  | 'HKD'
+  | 'INR'
+  | 'CAD'
+  | 'AMD'
+  | 'AUD'
+  | 'PLN'
+  | 'COP'
+  | 'BRL'
+  | 'CHF'
+  | 'MXN'
+  | 'ARS'
+  | 'SGD'
+  | 'SAR'
+  | 'MDL'
+  | 'JPY'
+  | 'RON'
+  | 'SEK'
+  | 'AZN'
+  | 'RSD'
+  | 'NOK'
+  | 'MYR'
+  | 'BGN'
+  | 'EGP'
+  | 'GTQ'
+  | 'CLP'
+  | 'NZD'
+  | 'BDT'
+  | 'KGS'
+  | 'THB'
+  | 'UZS'
+  | 'UYU'
+  | 'VND'
+  | 'UGX'
+  | 'KES'
+  | 'ZAR'
+  | 'VES'
+  | 'ETB'
+  | 'NGN'
+  | 'LKR'
+  | 'PHP'
+  | 'PKR'
+  | 'TJS'
+  | 'CNY'
+  | 'MZN'
+  | 'SDG'
+  | 'ZMW'
+
+export type PriceAtTime = {
+  rate: string
+  fiat_amount: string
+  currency_from: string
+  currency_to: string
+  amount_from: string
+  time: string
+}
+
 export type Account = {
   currency: string
   account_type: string
@@ -308,19 +379,28 @@ export class WalletClient {
     return this.get<AccountsResponse>('/api/v1/accounts/')
   }
 
-  async coins(fiatCurrency = 'USD'): Promise<Coin[]> {
+  async coins(fiatCurrency: FiatCurrency): Promise<Coin[]> {
     const { coins } = await this.get<{ coins: Coin[] }>(`/api/v1/coins/list/${fiatCurrency}/`)
     return coins
   }
 
-  transactions(cursor?: string): Promise<TransactionsPage> {
-    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
-    return this.get<TransactionsPage>(`/api/v1/transactions/${query}`)
+  async localCurrency(): Promise<FiatCurrency> {
+    const { local_currency } = await this.get<{ local_currency: FiatCurrency }>('/api/v1/currencies/local_currency/')
+    return local_currency
   }
 
-  accountTransactions(currency: string, limit?: number): Promise<TransactionsPage> {
+  transactions(cursor?: string, limit?: number): Promise<TransactionsPage> {
+    const query = new URLSearchParams()
+    if (cursor !== undefined) query.set('cursor', cursor)
+    if (limit !== undefined) query.set('limit', String(limit))
+    const search = query.size === 0 ? '' : `?${query.toString()}`
+    return this.get<TransactionsPage>(`/api/v1/transactions/${search}`)
+  }
+
+  accountTransactions(currency: string, limit?: number, cursor?: string): Promise<TransactionsPage> {
     const query = new URLSearchParams({ crypto_currency: currency })
     if (limit !== undefined) query.set('limit', String(limit))
+    if (cursor !== undefined) query.set('cursor', cursor)
     return this.get<TransactionsPage>(`/api/v1/transactions/single-account/?${query.toString()}`)
   }
 
@@ -342,19 +422,29 @@ export class WalletClient {
     return this.get<PnlResponse>('/customer-analytics/public-api/v1/pnl/assets/')
   }
 
-  coinDetails(currency: string, fiatCurrency: string): Promise<CoinDetails> {
+  coinDetails(currency: string, fiatCurrency: FiatCurrency): Promise<CoinDetails> {
     return this.get<CoinDetails>(
       `/api/v1/coins/details/${encodeURIComponent(currency)}/${encodeURIComponent(fiatCurrency)}/`
     )
   }
 
-  charts(currency: string, fiatCurrency: string): Promise<Charts> {
+  charts(currency: string, fiatCurrency: FiatCurrency): Promise<Charts> {
     return this.get<Charts>(`/api/v1/charts/${encodeURIComponent(currency)}/${encodeURIComponent(fiatCurrency)}/`)
   }
 
-  priceForFiatAtTime<T = unknown>(query: Record<string, string | number>): Promise<T> {
-    const search = new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)])).toString()
-    return this.get<T>(`/api/v1/exchange_rates/price_for_fiat_at_time/?${search}`)
+  priceForFiatAtTime(
+    cryptoCurrency: string,
+    localCurrency: FiatCurrency,
+    amount: number | string,
+    time: Date | string | number
+  ): Promise<PriceAtTime> {
+    const query = new URLSearchParams({
+      crypto_currency: cryptoCurrency,
+      local_currency: localCurrency,
+      amount: String(amount),
+      time: time instanceof Date ? time.toISOString() : String(time)
+    })
+    return this.get<PriceAtTime>(`/api/v1/exchange_rates/price_for_fiat_at_time/?${query.toString()}`)
   }
 
   async portfolio(): Promise<{ entries: PortfolioEntry[]; total: number; fiatCurrency: string }> {
