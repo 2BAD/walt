@@ -1,6 +1,7 @@
 # @2bad/wallet
 
-Read-only client for the Telegram Wallet API. Fetches accounts, coin rates, transactions, and a rolled-up portfolio.
+Read-only client for the Telegram Wallet API. Fetches balances, coin rates and charts, transaction history,
+profit and loss, and a rolled-up portfolio.
 
 ## Install
 
@@ -57,6 +58,90 @@ If `RequestWebView` returns `FLOOD_WAIT`, the source waits and retries once when
 Any `() => Promise<string>` works as a `tokenProvider`, so you can supply tokens another way. Bear in mind a
 static token has no way to renew itself, and the client will throw once it expires.
 
+## API
+
+Every method is a typed GET. Only `portfolio()` derives anything; the rest hand back what the API returned,
+with response fields kept in the API's own `snake_case`.
+
+### Balances
+
+```ts
+accounts(): Promise<AccountsResponse>
+portfolio(): Promise<{ entries: PortfolioEntry[]; total: number; fiatCurrency: string }>
+pnl(): Promise<PnlResponse>
+frozenBalances<T = unknown>(): Promise<T[]>
+```
+
+`accounts()` returns every currency the account can hold, including the ones with a zero balance.
+`portfolio()` is the convenience view over it: non-zero balances only, sorted by fiat value, with the total
+and the account's display currency.
+
+`pnl()` adds performance rather than position - absolute and percentage change over 24h and all time, per
+holding and as a total.
+
+### Prices and charts
+
+```ts
+coins(fiatCurrency: FiatCurrency): Promise<Coin[]>
+coinDetails(currency: string, fiatCurrency: FiatCurrency): Promise<CoinDetails>
+charts(currency: string, fiatCurrency: FiatCurrency): Promise<Charts>
+priceForFiatAtTime(
+  cryptoCurrency: string,
+  localCurrency: FiatCurrency,
+  amount: number | string,
+  time: Date | string | number
+): Promise<PriceAtTime>
+localCurrency(): Promise<FiatCurrency>
+```
+
+`FiatCurrency` is the 60-code set the API accepts. There is no default: pass one explicitly, or read the
+account's own with `localCurrency()`.
+
+`charts()` returns five fixed series - `day`, `week`, `month`, `year`, `all` - in one response.
+`priceForFiatAtTime()` values an amount at a past moment; a `Date` is serialised for you.
+
+```ts
+const fiat = await client.localCurrency()
+const { all } = await client.charts('TON', fiat)
+const then = await client.priceForFiatAtTime('TON', fiat, 100, new Date('2026-01-01'))
+```
+
+### Transactions
+
+```ts
+transactions(cursor?: string, limit?: number): Promise<TransactionsPage>
+accountTransactions(currency: string, limit?: number, cursor?: string): Promise<TransactionsPage>
+transactionDetails(id: number | string, gateway?: TransactionGateway): Promise<TransactionDetails>
+unconfirmedTransactions<T = unknown>(limit?: number): Promise<{ transactions: T[]; size: number }>
+```
+
+Both listings page by cursor: read `next_cursor` off a page and pass it back. Pass back only a cursor the API
+gave you, since a malformed one is a 500 rather than a validation error.
+
+```ts
+let page = await client.transactions(undefined, 50)
+const rows = [...page.transactions]
+while (page.next_cursor) {
+  page = await client.transactions(page.next_cursor, 50)
+  rows.push(...page.transactions)
+}
+```
+
+`transactionDetails()` returns a much wider record than a list row - fees, exchange rate, the paired side of a
+conversion, on-chain destination and hash. Its `gateway` argument is optional and narrows the lookup to one
+transaction type; the `gateway` field of a list row is the value to pass.
+
+`frozenBalances()` and `unconfirmedTransactions()` are generic because their element shape is unverified: the
+account used to derive these types has never held either. The container is typed, the rows are yours to
+describe.
+
+### A note on the types
+
+The Wallet API is undocumented and publishes no response schemas, so every type here was derived from real
+responses and checked field by field against a live account. They are accurate for what has been observed, and
+deliberately loose where it has not - nullable rather than narrow, `string` rather than a union that a future
+value would break. Treat them as a good map rather than a guarantee.
+
 ## Request headers
 
 Requests carry the same header set the Wallet web app sends: its `user-agent` and `sec-ch-ua` pair, the
@@ -82,7 +167,6 @@ from `.env`.
 pnpm build            # compile to ESM + generate .d.ts
 pnpm test             # run all tests
 pnpm test:unit        # unit tests with coverage
-pnpm test:integration # integration tests with coverage
 pnpm check            # lint + format check
 pnpm fix              # auto-fix lint + formatting
 pnpm telegram:login   # interactive Telegram sign-in, prints a session string
