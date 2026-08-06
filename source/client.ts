@@ -275,6 +275,7 @@ export type TransactionDetails = {
   gateway_details: unknown
   is_blocked: boolean
   is_cancellable: boolean
+  block_reason: string | null
 }
 
 export type ChartPoint = {
