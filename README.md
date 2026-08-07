@@ -156,6 +156,33 @@ while (page.transactions.length > 0 && page.next_cursor !== null) {
 conversion, on-chain destination and hash. Its `gateway` argument is optional and narrows the lookup to one
 transaction type; the `gateway` field of a list row is the value to pass.
 
+### Reading a transaction
+
+```ts
+normalizeTransaction(details: TransactionDetails): NormalizedTransaction
+```
+
+The raw record is easy to read backwards, so this turns one into directional legs:
+
+```ts
+const details = await client.transactionDetails(10000000000001, 'crypto_exchange')
+const { received, sent, fee } = normalizeTransaction(details)
+// received { currency: 'USDT', amount: '1000.000000' }
+// sent     { currency: 'BTC',  amount: '0.013728980000' }
+```
+
+Three things it takes care of. `type` is relative to the wallet, so the deposit above is a *sale* of BTC, not a
+purchase. `pair_transaction_*` is a real second leg only when its currency differs from `crypto_currency`; on
+every gateway except `crypto_exchange` it repeats the same asset back, sometimes as a gross amount against a
+net `crypto_amount`. And `crypto_amount` already has `fee_amount` taken out, so `fee` is reported for the
+record but must not be subtracted again.
+
+It needs a `transactionDetails()` record rather than a listing row: rows carry
+`pair_transaction_currency` but not `pair_transaction_amount`, so the second leg cannot be recovered from one.
+
+Summing the legs of every transaction reproduces the live account balances exactly, which is the check to
+repeat if any of this changes.
+
 `frozenBalances()` and `unconfirmedTransactions()` are generic because their element shape is unverified: the
 account used to derive these types has never held either. The container is typed, the rows are yours to
 describe.

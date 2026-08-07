@@ -284,6 +284,62 @@ export type TransactionDetails = {
   block_reason: string | null
 }
 
+export type TransactionLeg = {
+  currency: string
+  amount: string
+}
+
+export type NormalizedTransaction = {
+  id: number
+  createdAt: string
+  gateway: string
+  status: string
+  received: TransactionLeg | null
+  sent: TransactionLeg | null
+  /** Already deducted from `received`, so adding it back would double count. Reporting only. */
+  fee: TransactionLeg | null
+}
+
+/**
+ * Splits a transaction into what entered the wallet, what left it, and the fee.
+ *
+ * Three things about the raw shape make this easy to get backwards. `type` is relative to the
+ * wallet, so a `deposit` of USDT against a `pair_transaction_currency` of BTC is a sale of BTC
+ * rather than a purchase. `pair_transaction_*` is a genuine second leg only when its currency
+ * differs from `crypto_currency`; on every gateway but `crypto_exchange` it repeats the same
+ * asset back, sometimes with a gross amount against a net `crypto_amount`. And `crypto_amount`
+ * is already net of `fee_amount`.
+ *
+ * Needs a `transactionDetails()` record. A listing row carries `pair_transaction_currency` but
+ * not `pair_transaction_amount`, so the second leg cannot be recovered from it.
+ *
+ * @param details - A single record from `transactionDetails()`.
+ * @returns The same transaction as directional legs.
+ */
+export const normalizeTransaction = (details: TransactionDetails): NormalizedTransaction => {
+  const main = { currency: details.crypto_currency, amount: details.crypto_amount }
+  const pair =
+    details.pair_transaction_currency !== null &&
+    details.pair_transaction_amount !== null &&
+    details.pair_transaction_currency !== details.crypto_currency
+      ? { currency: details.pair_transaction_currency, amount: details.pair_transaction_amount }
+      : null
+  const inbound = details.type === 'deposit'
+
+  return {
+    id: details.id,
+    createdAt: details.created_at,
+    gateway: details.gateway,
+    status: details.status,
+    received: inbound ? main : pair,
+    sent: inbound ? pair : main,
+    fee:
+      details.fee_currency !== null && Number(details.fee_amount) > 0
+        ? { currency: details.fee_currency, amount: details.fee_amount ?? '0' }
+        : null
+  }
+}
+
 export type ChartPoint = {
   rate: string
   timestamp: number

@@ -1,4 +1,4 @@
-export { WalletAuthError, WalletClient } from '~/client.ts'
+export { normalizeTransaction, WalletAuthError, WalletClient } from '~/client.ts'
 export type {
   Account,
   AccountsResponse,
@@ -7,6 +7,7 @@ export type {
   Coin,
   CoinDetails,
   FiatCurrency,
+  NormalizedTransaction,
   PnlPosition,
   PnlResponse,
   PnlTotals,
@@ -17,6 +18,7 @@ export type {
   Transaction,
   TransactionDetails,
   TransactionGateway,
+  TransactionLeg,
   TransactionsPage,
   WalletClientOptions
 } from '~/client.ts'
