@@ -172,6 +172,52 @@ describe('walletClient', () => {
     )
   })
 
+  it('stops walking when a page comes back empty despite a fresh cursor', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const cursor = new URL(String(input)).searchParams.get('cursor')
+      if (cursor === null) return jsonResponse({ transactions: [{ id: 10000000000001 }], next_cursor: 'second' })
+      if (cursor === 'second') return jsonResponse({ transactions: [{ id: 10000000000002 }], next_cursor: 'third' })
+      return jsonResponse({ transactions: [], next_cursor: 'endless' })
+    })
+
+    const rows = await Array.fromAsync(makeClient(fetchImpl).allTransactions())
+
+    expect(rows.map((row) => row.id)).toStrictEqual([10000000000001, 10000000000002])
+    expect(fetchImpl).toHaveBeenCalledTimes(3)
+  })
+
+  it('stops walking when the api does return a null cursor', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ transactions: [{ id: 10000000000001 }], next_cursor: null })
+    )
+
+    const rows = await Array.fromAsync(makeClient(fetchImpl).allTransactions(50))
+
+    expect(rows).toHaveLength(1)
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/transactions/?limit=50')
+  })
+
+  it('threads the currency and cursor through an account walk', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const cursor = new URL(String(input)).searchParams.get('cursor')
+      if (cursor === null) return jsonResponse({ transactions: [{ id: 10000000000001 }], next_cursor: 'next' })
+      return jsonResponse({ transactions: [], next_cursor: 'endless' })
+    })
+
+    const rows = await Array.fromAsync(makeClient(fetchImpl).allAccountTransactions('TON', 20))
+
+    expect(rows).toHaveLength(1)
+    expect(fetchImpl.mock.calls[1]?.[0]).toBe(
+      'https://walletbot.me/api/v1/transactions/single-account/?crypto_currency=TON&limit=20&cursor=next'
+    )
+  })
+
   it('fetches a single transaction with its fee and valuation', async () => {
     expect.assertions(3)
 

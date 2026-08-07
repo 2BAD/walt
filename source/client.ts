@@ -417,6 +417,35 @@ export class WalletClient {
     return this.get<TransactionsPage>(`/api/v1/transactions/single-account/?${query.toString()}`)
   }
 
+  /**
+   * Walks a transaction listing to its end.
+   *
+   * Past the last row the API keeps handing back a fresh `next_cursor` with an empty `transactions`
+   * array, so an empty page is the only reliable stop signal - looping until `next_cursor` is null
+   * never terminates.
+   *
+   * @param page - Fetches one page, given the cursor the previous page returned.
+   * @yields Each transaction, oldest page last, in the order the API returns them.
+   */
+  private async *walk(page: (cursor?: string) => Promise<TransactionsPage>): AsyncGenerator<Transaction> {
+    let cursor: string | undefined
+    for (;;) {
+      const current = await page(cursor)
+      if (current.transactions.length === 0) return
+      yield* current.transactions
+      if (current.next_cursor === null) return
+      cursor = current.next_cursor
+    }
+  }
+
+  allTransactions(limit?: number): AsyncGenerator<Transaction> {
+    return this.walk((cursor) => this.transactions(cursor, limit))
+  }
+
+  allAccountTransactions(currency: string, limit?: number): AsyncGenerator<Transaction> {
+    return this.walk((cursor) => this.accountTransactions(currency, limit, cursor))
+  }
+
   transactionDetails(id: number | string, gateway?: TransactionGateway): Promise<TransactionDetails> {
     const query = gateway ? `?${new URLSearchParams({ transaction_gateway: gateway }).toString()}` : ''
     return this.get<TransactionDetails>(`/api/v1/transactions/details/${encodeURIComponent(String(id))}/${query}`)

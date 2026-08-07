@@ -111,17 +111,35 @@ const then = await client.priceForFiatAtTime('TON', fiat, 100, new Date('2026-01
 ```ts
 transactions(cursor?: string, limit?: number): Promise<TransactionsPage>
 accountTransactions(currency: string, limit?: number, cursor?: string): Promise<TransactionsPage>
+allTransactions(limit?: number): AsyncGenerator<Transaction>
+allAccountTransactions(currency: string, limit?: number): AsyncGenerator<Transaction>
 transactionDetails(id: number | string, gateway?: TransactionGateway): Promise<TransactionDetails>
 unconfirmedTransactions<T = unknown>(limit?: number): Promise<{ transactions: T[]; size: number }>
 ```
 
-Both listings page by cursor: read `next_cursor` off a page and pass it back. Pass back only a cursor the API
-gave you, since a malformed one is a 500 rather than a validation error.
+To read a whole listing, use the `all*` generators. They stop on the first empty page:
+
+```ts
+for await (const transaction of client.allTransactions(100)) {
+  console.log(transaction.id, transaction.gateway, transaction.amount, transaction.currency)
+}
+
+const rows = await Array.fromAsync(client.allAccountTransactions('TON'))
+```
+
+Both paged methods are still there if you want a single page at a time: read `next_cursor` off a page and
+pass it back. Pass back only a cursor the API gave you, since a malformed one is a 500 rather than a
+validation error.
+
+Do not drive that loop with `while (page.next_cursor)`. Past the last row the API keeps returning a fresh
+`next_cursor` alongside an empty `transactions` array, and it does so indefinitely - a walk of one real
+account ran 5000 pages past the end without ever seeing null. `next_cursor` is typed `string | null` because
+the field can hold null, not because you will be handed one. Stop when a page comes back empty.
 
 ```ts
 let page = await client.transactions(undefined, 50)
 const rows = [...page.transactions]
-while (page.next_cursor) {
+while (page.transactions.length > 0 && page.next_cursor !== null) {
   page = await client.transactions(page.next_cursor, 50)
   rows.push(...page.transactions)
 }
