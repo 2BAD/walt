@@ -300,6 +300,7 @@ export type Charts = {
 export type PnlPosition = {
   currency: string
   fiat_currency: string
+  /** Cost basis, not value - add `absolute_all_time`. Re-priced from historical rates that carry bad prints. */
   current_value_in_fiat: string
   absolute_24h: string
   percentage_24h: string
@@ -311,6 +312,7 @@ export type PnlPosition = {
 
 export type PnlTotals = {
   fiat_currency: string
+  /** Cost basis, not current value - add `absolute_all_time` for that. */
   current_value_in_fiat: string
   absolute_24h: string
   percentage_24h: string
