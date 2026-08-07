@@ -37,6 +37,12 @@ export type WalletClientOptions = {
   tokenProvider: () => Promise<string>
   baseUrl?: string
   fetch?: typeof fetch
+  /** Extra attempts after a request fails on a transient status. Default 3, `0` disables retrying. */
+  retries?: number
+  /** Base for the exponential backoff between those attempts, in ms. Default 500. */
+  retryDelayMs?: number
+  /** Requests allowed in flight at once. Default 4, `Infinity` removes the limit. */
+  maxConcurrent?: number
 }
 
 export type FiatCurrency =
@@ -383,6 +389,34 @@ export type PnlResponse = {
 
 export class WalletAuthError extends Error {}
 
+export class WalletRequestError extends Error {
+  /** HTTP status, or `0` when the request never got a response. */
+  readonly status: number
+  /** Parsed from `retry-after` when the server sent one as a whole number of seconds. */
+  readonly retryAfterMs: number | null
+
+  constructor(message: string, status: number, retryAfterMs: number | null, options?: ErrorOptions) {
+    super(message, options)
+    this.status = status
+    this.retryAfterMs = retryAfterMs
+  }
+}
+
+/**
+ * Statuses worth trying again. 500 is deliberately absent: this API answers a malformed cursor
+ * with one, so it means a bad request rather than a bad moment.
+ */
+const RETRYABLE_STATUS = new Set([0, 429, 502, 503, 504])
+
+const MAX_RETRY_DELAY_MS = 30_000
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+const retryAfterOf = (response: Response): number | null => {
+  const header = response.headers.get('retry-after')
+  return header !== null && /^\d+$/.test(header.trim()) ? Number(header.trim()) * 1000 : null
+}
+
 export class WalletClient {
   private readonly baseUrl: string
   private readonly fetchImpl: typeof fetch
@@ -390,8 +424,13 @@ export class WalletClient {
   private readonly traceId = hex(16)
   private readonly baggage: string
   private readonly referer: string
+  private readonly retries: number
+  private readonly retryDelayMs: number
+  private readonly maxConcurrent: number
   private token: string | null = null
   private pending: Promise<string> | null = null
+  private active = 0
+  private readonly waiting: (() => void)[] = []
 
   constructor(options: WalletClientOptions) {
     if (!options.tokenProvider) {
@@ -400,6 +439,9 @@ export class WalletClient {
     this.tokenProvider = options.tokenProvider
     this.baseUrl = options.baseUrl ?? BASE_URL
     this.fetchImpl = options.fetch ?? fetch
+    this.retries = options.retries ?? 3
+    this.retryDelayMs = options.retryDelayMs ?? 500
+    this.maxConcurrent = options.maxConcurrent ?? 4
     this.referer = `${this.baseUrl}/main`
     this.baggage = [
       'sentry-environment=production',
@@ -429,27 +471,70 @@ export class WalletClient {
     return token
   }
 
-  private async get<T>(path: string, allowRefresh = true): Promise<T> {
-    const token = await this.ensureToken()
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-      headers: {
-        ...BROWSER_HEADERS,
-        authorization: token,
-        referer: this.referer,
-        baggage: this.baggage,
-        'sentry-trace': `${this.traceId}-${hex(8)}-0`,
-        traceparent: `00-${hex(16)}-${hex(8)}-01`
-      }
+  private async acquire(): Promise<void> {
+    if (this.active < this.maxConcurrent) {
+      this.active++
+      return
+    }
+    return new Promise((resolve) => {
+      this.waiting.push(() => {
+        this.active++
+        resolve()
+      })
     })
+  }
+
+  private release(): void {
+    this.active--
+    this.waiting.shift()?.()
+  }
+
+  private async send<T>(path: string, allowRefresh: boolean): Promise<T> {
+    const token = await this.ensureToken()
+    let response: Response
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        headers: {
+          ...BROWSER_HEADERS,
+          authorization: token,
+          referer: this.referer,
+          baggage: this.baggage,
+          'sentry-trace': `${this.traceId}-${hex(8)}-0`,
+          traceparent: `00-${hex(16)}-${hex(8)}-01`
+        }
+      })
+    } catch (cause) {
+      throw new WalletRequestError(`GET ${path} failed (no response)`, 0, null, { cause })
+    }
     if (response.status === 401) {
       if (allowRefresh) {
         this.token = null
-        return this.get<T>(path, false)
+        return this.send<T>(path, false)
       }
       throw new WalletAuthError('token rejected after refresh')
     }
-    if (!response.ok) throw new Error(`GET ${path} failed (${response.status})`)
+    if (!response.ok) {
+      throw new WalletRequestError(`GET ${path} failed (${response.status})`, response.status, retryAfterOf(response))
+    }
     return (await response.json()) as T
+  }
+
+  private async get<T>(path: string): Promise<T> {
+    await this.acquire()
+    try {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          return await this.send<T>(path, true)
+        } catch (error) {
+          const transient = error instanceof WalletRequestError && RETRYABLE_STATUS.has(error.status)
+          if (!transient || attempt >= this.retries) throw error
+          const backoff = Math.min(MAX_RETRY_DELAY_MS, this.retryDelayMs * 2 ** attempt)
+          await sleep(error.retryAfterMs ?? backoff / 2 + Math.random() * (backoff / 2))
+        }
+      }
+    } finally {
+      this.release()
+    }
   }
 
   accounts(): Promise<AccountsResponse> {

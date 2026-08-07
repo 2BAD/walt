@@ -58,6 +58,34 @@ If `RequestWebView` returns `FLOOD_WAIT`, the source waits and retries once when
 Any `() => Promise<string>` works as a `tokenProvider`, so you can supply tokens another way. Bear in mind a
 static token has no way to renew itself, and the client will throw once it expires.
 
+### Retries and pacing
+
+Sustained reading gets rate limited, so the client paces itself:
+
+```ts
+new WalletClient({
+  tokenProvider,
+  retries: 3,        // extra attempts on a transient failure, 0 disables
+  retryDelayMs: 500, // base for the exponential backoff between them
+  maxConcurrent: 4   // requests in flight at once, Infinity removes the limit
+})
+```
+
+Retries cover 429, 502, 503, 504 and a request that never got a response at all, with exponential backoff and
+jitter. A `retry-after` header is used instead of the backoff when the server sends one. **500 is deliberately
+not retried**: this API answers a malformed cursor with one, so it means a bad request rather than a bad
+moment.
+
+A failed request throws `WalletRequestError`, which carries the `status` (`0` when there was no response) so
+callers can branch without matching on the message. A 401 is separate and unchanged: the token is dropped and
+the request replayed once, then `WalletAuthError` if it is rejected again.
+
+`maxConcurrent` queues rather than rejects, so firing a batch is safe:
+
+```ts
+const details = await Promise.all(ids.map((id) => client.transactionDetails(id)))
+```
+
 ## API
 
 Every method is a typed GET. Only `portfolio()` derives anything; the rest hand back what the API returned,

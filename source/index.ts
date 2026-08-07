@@ -1,4 +1,4 @@
-export { normalizeTransaction, WalletAuthError, WalletClient } from '~/client.ts'
+export { normalizeTransaction, WalletAuthError, WalletClient, WalletRequestError } from '~/client.ts'
 export type {
   Account,
   AccountsResponse,

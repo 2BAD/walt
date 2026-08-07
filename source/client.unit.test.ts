@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import { type TransactionDetails, normalizeTransaction, WalletAuthError, WalletClient } from '~/client.ts'
+import {
+  type TransactionDetails,
+  type WalletClientOptions,
+  normalizeTransaction,
+  WalletAuthError,
+  WalletClient,
+  WalletRequestError
+} from '~/client.ts'
 
 const detailsOf = (overrides: Partial<TransactionDetails>): TransactionDetails => ({
   id: 10000000000001,
@@ -488,6 +495,108 @@ describe('walletClient', () => {
 
     await expect(client.accounts()).rejects.toBeInstanceOf(WalletAuthError)
     expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('walletClient retries', () => {
+  const retryingClient = (fetchImpl: FetchMock, options: Partial<WalletClientOptions> = {}) =>
+    new WalletClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl, retryDelayMs: 0, ...options })
+
+  it('retries a 503 until it succeeds', async () => {
+    expect.assertions(2)
+
+    let calls = 0
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
+      calls++
+      return calls < 3 ? jsonResponse({}, 503) : jsonResponse({ accounts: [] })
+    })
+
+    await expect(retryingClient(fetchImpl).accounts()).resolves.toStrictEqual({ accounts: [] })
+    expect(fetchImpl).toHaveBeenCalledTimes(3)
+  })
+
+  it('gives up after the configured number of extra attempts', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}, 503))
+
+    await expect(retryingClient(fetchImpl, { retries: 2 }).accounts()).rejects.toBeInstanceOf(WalletRequestError)
+    expect(fetchImpl).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not retry a 500, which this api returns for bad input', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}, 500))
+
+    await expect(retryingClient(fetchImpl).accounts()).rejects.toThrow('failed (500)')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries when fetch never returns a response', async () => {
+    expect.assertions(2)
+
+    let calls = 0
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
+      calls++
+      if (calls === 1) throw new TypeError('network down')
+      return jsonResponse({ accounts: [] })
+    })
+
+    await expect(retryingClient(fetchImpl).accounts()).resolves.toStrictEqual({ accounts: [] })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('prefers retry-after over its own backoff', async () => {
+    expect.assertions(1)
+
+    let calls = 0
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
+      calls++
+      return calls === 1
+        ? new Response('{}', { status: 503, headers: { 'retry-after': '0' } })
+        : jsonResponse({ accounts: [] })
+    })
+
+    // A ten minute base delay would stall this test if retry-after were ignored.
+    await expect(retryingClient(fetchImpl, { retryDelayMs: 600_000 }).accounts()).resolves.toStrictEqual({
+      accounts: []
+    })
+  })
+
+  it('carries the status on the error it throws', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}, 429))
+
+    await expect(retryingClient(fetchImpl, { retries: 0 }).accounts()).rejects.toMatchObject({ status: 429 })
+  })
+
+  it('keeps no more than maxConcurrent requests in flight', async () => {
+    expect.assertions(2)
+
+    let inFlight = 0
+    let peak = 0
+    const holds: (() => void)[] = []
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await new Promise<void>((resolve) => holds.push(resolve))
+      inFlight--
+      return jsonResponse({ accounts: [] })
+    })
+
+    const client = retryingClient(fetchImpl, { maxConcurrent: 2 })
+    const all = Promise.all(Array.from({ length: 6 }, () => client.accounts()))
+    // Six requests two at a time is three waves; the extra rounds are slack.
+    for (let round = 0; round < 12; round++) {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      holds.splice(0).forEach((release) => release())
+    }
+
+    await all
+    expect(fetchImpl).toHaveBeenCalledTimes(6)
+    expect(peak).toBe(2)
   })
 })
 
