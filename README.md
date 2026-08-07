@@ -79,6 +79,13 @@ and the account's display currency.
 `pnl()` adds performance rather than position - absolute and percentage change over 24h and all time, per
 holding and as a total.
 
+`portfolio()` entries do not necessarily add up to its `total`, and that is the API's arithmetic rather than
+ours. Every row `accounts()` returns is the spot wallet, while the total also covers staked funds that have no
+row of their own, so the total can exceed the entries. It is the figure the Wallet app itself displays. `pnl()`
+is where the staked side shows up, as positions whose `account_type` is not `bank_account`.
+
+`portfolio()` throws rather than returning `NaN` if a balance or total is not a parseable decimal string.
+
 ### Prices and charts
 
 ```ts

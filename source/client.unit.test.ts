@@ -121,6 +121,62 @@ describe('walletClient', () => {
     expect(fiatCurrency).toBe('USD')
   })
 
+  it('rejects a portfolio total that is not a number', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ available_balance_total_fiat_currency: 'USD', accounts: [] })
+    )
+
+    await expect(makeClient(fetchImpl).portfolio()).rejects.toThrow('total is not a number')
+  })
+
+  it('rejects a balance that is not a number instead of dropping the row', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({
+        available_balance_total_fiat_amount: '150.00',
+        available_balance_total_fiat_currency: 'USD',
+        accounts: [{ currency: 'TON', available_balance: null, available_balance_fiat_amount: '50.00' }]
+      })
+    )
+
+    await expect(makeClient(fetchImpl).portfolio()).rejects.toThrow('TON balance is not a number')
+  })
+
+  it('rejects a held balance it cannot value', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({
+        available_balance_total_fiat_amount: '150.00',
+        available_balance_total_fiat_currency: 'USD',
+        accounts: [{ currency: 'TON', available_balance: '10', available_balance_fiat_amount: undefined }]
+      })
+    )
+
+    await expect(makeClient(fetchImpl).portfolio()).rejects.toThrow('TON fiat value is not a number')
+  })
+
+  it('ignores an unvaluable zero balance', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({
+        available_balance_total_fiat_amount: '50.00',
+        available_balance_total_fiat_currency: 'USD',
+        accounts: [
+          { currency: 'ETH', available_balance: '0', available_balance_fiat_amount: null },
+          { currency: 'TON', available_balance: '10', available_balance_fiat_amount: '50.00' }
+        ]
+      })
+    )
+    const { entries } = await makeClient(fetchImpl).portfolio()
+
+    expect(entries.map((entry) => entry.currency)).toStrictEqual(['TON'])
+  })
+
   it('unwraps the coins list', async () => {
     expect.assertions(1)
 

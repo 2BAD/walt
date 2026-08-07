@@ -27,6 +27,12 @@ const BROWSER_HEADERS = {
 
 const hex = (bytes: number): string => randomBytes(bytes).toString('hex')
 
+const decimal = (value: unknown): number | null => {
+  if (typeof value !== 'string' || value.trim() === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 export type WalletClientOptions = {
   tokenProvider: () => Promise<string>
   baseUrl?: string
@@ -491,17 +497,33 @@ export class WalletClient {
 
   async portfolio(): Promise<{ entries: PortfolioEntry[]; total: number; fiatCurrency: string }> {
     const data = await this.accounts()
-    const entries = data.accounts
-      .filter((account) => Number(account.available_balance) > 0)
-      .map((account) => ({
-        currency: account.currency,
-        amount: account.available_balance,
-        fiatValue: Number(account.available_balance_fiat_amount)
-      }))
-      .sort((a, b) => b.fiatValue - a.fiatValue)
+    if (!Array.isArray(data.accounts)) {
+      throw new Error('accounts response carries no accounts array')
+    }
+    const total = decimal(data.available_balance_total_fiat_amount)
+    if (total === null) {
+      throw new Error(`accounts total is not a number: ${String(data.available_balance_total_fiat_amount)}`)
+    }
+
+    const entries: PortfolioEntry[] = []
+    for (const account of data.accounts) {
+      const balance = decimal(account.available_balance)
+      if (balance === null) {
+        throw new Error(`${account.currency} balance is not a number: ${String(account.available_balance)}`)
+      }
+      if (balance <= 0) continue
+      const fiatValue = decimal(account.available_balance_fiat_amount)
+      if (fiatValue === null) {
+        throw new Error(
+          `${account.currency} fiat value is not a number: ${String(account.available_balance_fiat_amount)}`
+        )
+      }
+      entries.push({ currency: account.currency, amount: account.available_balance, fiatValue })
+    }
+
     return {
-      entries,
-      total: Number(data.available_balance_total_fiat_amount),
+      entries: entries.sort((a, b) => b.fiatValue - a.fiatValue),
+      total,
       fiatCurrency: data.available_balance_total_fiat_currency
     }
   }
