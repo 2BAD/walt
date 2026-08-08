@@ -123,8 +123,38 @@ holding and as a total.
 
 `portfolio()` entries do not necessarily add up to its `total`, and that is the API's arithmetic rather than
 ours. Every row `accounts()` returns is the spot wallet, while the total also covers staked funds that have no
-row of their own, so the total can exceed the entries. It is the figure the Wallet app itself displays. `pnl()`
-is where the staked side shows up, as positions whose `account_type` is not `bank_account`.
+row of their own, so the total can exceed the entries. It is the figure the Wallet app itself displays.
+
+### Earn
+
+```ts
+earnCampaigns(): Promise<EarnCampaignsResponse>
+earnCampaignTransactions(campaignId: number | string): Promise<EarnTransactionsPage>
+earnRate(from: string, to: string): Promise<EarnRate>
+```
+
+This is the staked side `accounts()` leaves out, and the reason its rows fall short of its own total.
+`earnCampaigns()` returns every campaign; `account` is populated only on the ones this wallet has joined, and
+`account.balance` is the staked quantity:
+
+```ts
+const { campaigns } = await client.earnCampaigns()
+const staked = campaigns.filter((campaign) => campaign.account !== null)
+```
+
+Priced up, those balances account for the difference. On the account these types came from, spot rows summed
+to 6504.39 against a stated total of 7894.74, and the four joined campaigns came to 1389.87 of the 1390.35
+gap, the remainder being rate drift between the two calls.
+
+Not every staking asset is quoted by `coins()` - `USDe` is not - which is what `earnRate()` is for. It also
+reports how far a stablecoin has drifted from its peg, in `depeg_info`.
+
+`earnCampaignTransactions()` covers deposits, withdrawals and payouts inside a campaign. These are not in
+`transactions()`, which sees only the spot leg of a move into or out of earn. The response carries three
+separate cursors, one per source; the method returns the first page and does not follow them yet.
+
+`pnl()` also reports the staked positions, as ones whose `account_type` is not `bank_account`, but only
+`earnCampaigns()` gives the balance, the rate and the terms.
 
 `portfolio()` throws rather than returning `NaN` if a balance or total is not a parseable decimal string.
 

@@ -609,6 +609,36 @@ describe('walletClient retries', () => {
   })
 })
 
+describe('walletClient earn', () => {
+  it('requests the campaigns endpoint with its trailing slash', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ campaigns: [] }))
+    const { campaigns } = await makeClient(fetchImpl).earnCampaigns()
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/earn/public-api/v1/campaigns/')
+    expect(campaigns).toStrictEqual([])
+  })
+
+  it('scopes transactions to one campaign', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [] }))
+    await makeClient(fetchImpl).earnCampaignTransactions(11)
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/earn/public-api/v1/campaigns/11/transactions')
+  })
+
+  it('encodes both sides of a rate lookup', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ rate: '1' }))
+    await makeClient(fetchImpl).earnRate('USDT', 'USDe')
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/earn/public-api/v1/rate/USDT/USDe')
+  })
+})
+
 describe('walletClient detailsFor', () => {
   const rows = (count: number) =>
     Array.from({ length: count }, (_, index) => ({ id: 10000000000001 + index }) as Transaction)

@@ -401,6 +401,129 @@ export type Charts = {
   all: ChartPoint[]
 }
 
+export type EarnAccount = {
+  /** Units staked in this campaign. There is no `accounts()` row for it. */
+  balance: string
+  paid_out_amount: string
+  currency: string
+  created_at: string
+  max_withdraw_amount: unknown
+  pending_withdraw_deadline_at: unknown
+}
+
+export type EarnAccessPolicy = {
+  access_to_deposit: boolean
+  access_to_withdrawal: boolean
+  access_to_full_withdrawal: boolean
+  deposit_restriction_reason: unknown
+}
+
+export type EarnBonus = {
+  name: string
+  status: string
+  apy: string
+  combined_apy: string
+  max_amount: string
+  paid_out_amount: string
+  duration: number | null
+  end_at: string | null
+}
+
+export type EarnInterestRate = {
+  rate: string
+  interest_type: string
+  combined_rate: string
+  effective_rate: string
+  bonus_rate: string | null
+}
+
+export type EarnPayoutPool = {
+  total: string
+  available: string
+}
+
+export type EarnAmount = {
+  amount: string
+  currency: string
+}
+
+export type EarnCampaign = {
+  campaign_id: number
+  /** Matches `PnlPosition.earn_campaign_name`, which is how a pnl row maps back to a campaign. */
+  name: string
+  status: string
+  /** Null unless this account has joined the campaign. */
+  account: EarnAccount | null
+  apy_type: string
+  current_apy: string
+  effective_apy: string | null
+  interest_rate: EarnInterestRate
+  bonus: EarnBonus | null
+  access_policy: EarnAccessPolicy
+  payout_pool: EarnPayoutPool | null
+  total_earned: EarnAmount | null
+  payout_type: string
+  payout_account_type: string
+  payout_interval: number
+  payout_account: unknown
+  input_currency: string
+  deposit_currency: string
+  payout_currency: string
+  deposit_withdraw_currency: string
+  payout_withdraw_currency: string
+  min_amount: string
+  max_amount: string | null
+  min_deposit_amount: string
+  min_withdraw_amount: string | null
+  last_24hours_paid_out_amount: string | null
+  start_at: string
+  end_at: string | null
+  terms_and_conditions: boolean
+  is_deposit_limit_exceeded: boolean
+}
+
+export type EarnCampaignsResponse = {
+  campaigns: EarnCampaign[]
+  required_kyc_level: string
+  ab_tests: Record<string, unknown>
+  tooltip_campaign_id: number | null
+  total_participants: number
+}
+
+export type EarnTransaction = {
+  id: number
+  transaction_type: string
+  direction: string
+  status: string
+  source: string
+  amount: string
+  currency: string
+  date: string
+  transfer_id: string
+  idempotency_key: string
+  deadline_at: unknown
+  pending_reason: unknown
+}
+
+export type EarnTransactionsPage = {
+  transactions: EarnTransaction[]
+  deposit_acc_next_from: number | null
+  payout_acc_next_from: number | null
+  transfer_request_next_before_datetime: string | null
+}
+
+export type EarnDepegInfo = {
+  depeg_state: string
+  depeg: number
+  currency: string
+  reference_currency: string
+}
+
+export type EarnRate = {
+  rate: string
+  depeg_info: EarnDepegInfo | null
+}
+
 export type PnlPosition = {
   currency: string
   fiat_currency: string
@@ -698,6 +821,44 @@ export class WalletClient {
 
   frozenBalances<T = unknown>(): Promise<T[]> {
     return this.get<T[]>('/api/v1/accounts/frozen')
+  }
+
+  /**
+   * Every earn campaign, with `account` populated on the ones this wallet has joined.
+   *
+   * This is the staked side that `accounts()` leaves out. Its rows are all `bank_account`, while
+   * `available_balance_total_fiat_amount` counts staked funds too, so the entries never add up to
+   * the total on their own. `account.balance` is the missing quantity, per campaign.
+   *
+   * The trailing slash matters: without it the request is rejected.
+   */
+  earnCampaigns(): Promise<EarnCampaignsResponse> {
+    return this.get<EarnCampaignsResponse>('/earn/public-api/v1/campaigns/')
+  }
+
+  /**
+   * Deposits, withdrawals and payouts within one campaign.
+   *
+   * These do not appear in `transactions()`, which sees only the spot side of a move into or out
+   * of earn. The response carries three separate cursors, one per source, which this does not yet
+   * follow - it returns the first page.
+   *
+   * @param campaignId - `campaign_id` from `earnCampaigns()`.
+   */
+  earnCampaignTransactions(campaignId: number | string): Promise<EarnTransactionsPage> {
+    return this.get<EarnTransactionsPage>(
+      `/earn/public-api/v1/campaigns/${encodeURIComponent(String(campaignId))}/transactions`
+    )
+  }
+
+  /**
+   * Conversion rate between a staking pair, with how far a stablecoin has drifted from its peg.
+   *
+   * @param from - Currency to convert out of.
+   * @param to - Currency to convert into.
+   */
+  earnRate(from: string, to: string): Promise<EarnRate> {
+    return this.get<EarnRate>(`/earn/public-api/v1/rate/${encodeURIComponent(from)}/${encodeURIComponent(to)}`)
   }
 
   pnl(): Promise<PnlResponse> {
