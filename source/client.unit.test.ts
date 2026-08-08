@@ -163,6 +163,47 @@ describe('walletClient', () => {
     expect(fiatCurrency).toBe('USD')
   })
 
+  it('reports what the entries miss against the api total', async () => {
+    expect.assertions(3)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({
+        available_balance_total_fiat_amount: '250.00',
+        available_balance_total_fiat_currency: 'USD',
+        accounts: [
+          { currency: 'TON', available_balance: '10', available_balance_fiat_amount: '50.00' },
+          { currency: 'BTC', available_balance: '0.001', available_balance_fiat_amount: '100.00' }
+        ]
+      })
+    )
+
+    const { entriesTotal, total, staked } = await makeClient(fetchImpl).portfolio()
+
+    expect(entriesTotal).toBe(150)
+    expect(total).toBe(250)
+    expect(staked).toBe(100)
+  })
+
+  it('reports nothing staked when the entries already reach the total', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({
+        available_balance_total_fiat_amount: '50.00',
+        available_balance_total_fiat_currency: 'USD',
+        accounts: [
+          { currency: 'TON', available_balance: '10', available_balance_fiat_amount: '50.00' },
+          { currency: 'ETH', available_balance: '0', available_balance_fiat_amount: '0.00' }
+        ]
+      })
+    )
+
+    const { entriesTotal, staked } = await makeClient(fetchImpl).portfolio()
+
+    expect(entriesTotal).toBe(50)
+    expect(staked).toBe(0)
+  })
+
   it('rejects a portfolio total that is not a number', async () => {
     expect.assertions(1)
 

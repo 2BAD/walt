@@ -297,6 +297,23 @@ export type PortfolioEntry = {
   fiatValue: number
 }
 
+export type Portfolio = {
+  /** Spot balances above zero, largest fiat value first. */
+  entries: PortfolioEntry[]
+  /** What `entries` add up to. */
+  entriesTotal: number
+  /** The API's own total, which counts staked funds that have no `accounts()` row. */
+  total: number
+  /**
+   * `total - entriesTotal`, so whatever the API counts that it did not hand back a row for.
+   * On the account these types came from that was the earn balance to within 0.03%, and
+   * `earnCampaigns()` itemises it. Expect a few cents either way from rounding when nothing
+   * is staked.
+   */
+  staked: number
+  fiatCurrency: string
+}
+
 export type TransactionDetails = {
   id: number
   type: string
@@ -890,7 +907,14 @@ export class WalletClient {
     return this.get<PriceAtTime>(`/api/v1/exchange_rates/price_for_fiat_at_time/?${query.toString()}`)
   }
 
-  async portfolio(): Promise<{ entries: PortfolioEntry[]; total: number; fiatCurrency: string }> {
+  /**
+   * Non-zero spot balances, with both totals so the difference between them is visible.
+   *
+   * `entries` is the spot wallet and `total` is the API's own figure, which also counts staked
+   * funds that have no `accounts()` row. The two are not meant to agree; `staked` is what sits
+   * between them. `earnCampaigns()` breaks that number down.
+   */
+  async portfolio(): Promise<Portfolio> {
     const data = await this.accounts()
     if (!Array.isArray(data.accounts)) {
       throw new Error('accounts response carries no accounts array')
@@ -916,9 +940,13 @@ export class WalletClient {
       entries.push({ currency: account.currency, amount: account.available_balance, fiatValue })
     }
 
+    const entriesTotal = entries.reduce((sum, entry) => sum + entry.fiatValue, 0)
+
     return {
       entries: entries.sort((a, b) => b.fiatValue - a.fiatValue),
+      entriesTotal,
       total,
+      staked: total - entriesTotal,
       fiatCurrency: data.available_balance_total_fiat_currency
     }
   }

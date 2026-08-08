@@ -121,9 +121,22 @@ the app shows.
 `pnl()` adds performance rather than position - absolute and percentage change over 24h and all time, per
 holding and as a total.
 
-`portfolio()` entries do not necessarily add up to its `total`, and that is the API's arithmetic rather than
-ours. Every row `accounts()` returns is the spot wallet, while the total also covers staked funds that have no
-row of their own, so the total can exceed the entries. It is the figure the Wallet app itself displays.
+`portfolio()` entries do not add up to its `total`, and that is the API's arithmetic rather than ours. Every
+row `accounts()` returns is the spot wallet, while the total also covers staked funds that have no row of
+their own. It is the figure the Wallet app itself displays. Rather than leave that to a footnote, the return
+carries both numbers and their difference:
+
+```ts
+const { entries, entriesTotal, total, staked } = await client.portfolio()
+// entries      spot balances above zero
+// entriesTotal what they add up to
+// total        the API's own figure, spot and staked
+// staked       total - entriesTotal
+```
+
+`staked` is derived by subtraction, so it is whatever the API counted without handing back a row for it. On
+the account these types came from that was the earn balance to within 0.03%. Expect a few cents either way
+from rounding when nothing is staked, and use `earnCampaigns()` to itemise it.
 
 ### Earn
 

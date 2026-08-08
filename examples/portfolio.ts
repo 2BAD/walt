@@ -25,12 +25,23 @@ const storage = {
 const source = new TelegramTokenSource({ session, apiId, apiHash, storage })
 const client = new WalletClient({ tokenProvider: () => source.token() })
 
-const { entries, total, fiatCurrency } = await client.portfolio()
+const { entries, entriesTotal, total, staked, fiatCurrency } = await client.portfolio()
 for (const entry of entries) {
   console.log(
     `${entry.currency.padEnd(8)} ${entry.amount.padStart(20)}  ${entry.fiatValue.toFixed(2).padStart(12)} ${fiatCurrency}`
   )
 }
+console.log('-'.repeat(44))
+console.log(`${'SPOT'.padEnd(8)} ${''.padStart(20)}  ${entriesTotal.toFixed(2).padStart(12)} ${fiatCurrency}`)
+
+if (Math.abs(staked) >= 0.01) {
+  console.log(`${'STAKED'.padEnd(8)} ${''.padStart(20)}  ${staked.toFixed(2).padStart(12)} ${fiatCurrency}`)
+  for (const campaign of (await client.earnCampaigns()).campaigns) {
+    if (!campaign.account) continue
+    console.log(`  ${campaign.name.padEnd(24)} ${campaign.account.balance.padStart(24)} ${campaign.account.currency}`)
+  }
+}
+
 console.log('-'.repeat(44))
 console.log(`${'TOTAL'.padEnd(8)} ${''.padStart(20)}  ${total.toFixed(2).padStart(12)} ${fiatCurrency}`)
 

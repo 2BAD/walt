@@ -26,6 +26,7 @@ export type {
   PnlPosition,
   PnlResponse,
   PnlTotals,
+  Portfolio,
   PortfolioEntry,
   PriceAtTime,
   TradingHoursPeriod,
