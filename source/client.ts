@@ -116,9 +116,36 @@ export type PriceAtTime = {
   time: string
 }
 
+export type AccountAddress = {
+  /** Null until the address is created, which is what `is_created` on the account reports. */
+  address: string | null
+  network: string
+  network_code: string
+  wallet_to_replace: boolean
+}
+
+export type AccountAction = {
+  is_enabled: boolean
+  is_popular: boolean
+  scheduled_at: unknown
+}
+
+export type AccountActions = {
+  deposit: AccountAction
+  withdraw_inner: AccountAction
+  withdraw_outer: AccountAction
+  exchange: AccountAction
+  p2p: AccountAction
+  purchase: AccountAction
+}
+
 export type Account = {
   currency: string
   account_type: string
+  /** `onchain`, `stock` or `etf` on the account this was derived from. Left wide, see the readme. */
+  category: string
+  description: string | null
+  market_cap: string | null
   rate: string
   absolute_rate_change: string
   percent_rate_change: string
@@ -127,6 +154,11 @@ export type Account = {
   available_balance_usd_amount: string
   available_balance_fiat_amount: string
   available_balance_fiat_currency: string
+  addresses: AccountAddress[]
+  actions: AccountActions
+  is_created: boolean
+  is_always_on_main: boolean
+  is_new_currency: boolean
   has_transactions: boolean
 }
 
@@ -273,7 +305,8 @@ export type TransactionDetails = {
   gateway: string
   crypto_amount: string
   crypto_currency: string
-  local_fiat_amount: string
+  /** Null on the gateways that never priced the transaction: `p2p_order`, `withdraw_onchain`, `top_up`. */
+  local_fiat_amount: string | null
   local_fiat_amount_now: string
   local_currency: string
   fee_amount: string | null
@@ -284,6 +317,15 @@ export type TransactionDetails = {
   username: string | null
   tg_id: number | null
   transfer_id: string | null
+  mention: string | null
+  comment: string | null
+  input_addresses: string | null
+  recipient_wallet_address: string | null
+  network: string | null
+  crypto_tx_id: string | null
+  /** Block explorer url for `crypto_tx_id`, and present on the same records. */
+  transaction_link: string | null
+  photo_url: string | null
   gateway_details: unknown
   is_blocked: boolean
   is_cancellable: boolean

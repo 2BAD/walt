@@ -104,6 +104,20 @@ frozenBalances<T = unknown>(): Promise<T[]>
 `portfolio()` is the convenience view over it: non-zero balances only, sorted by fiat value, with the total
 and the account's display currency.
 
+An `Account` row carries more than a balance. `category` classifies the asset, `onchain`, `stock` or `etf` on
+the account these types came from, which is the field to group by rather than guessing from the ticker - the
+tokenized equities all end in `x`, but so do the ETFs:
+
+```ts
+const { accounts } = await client.accounts()
+const equities = accounts.filter((account) => account.category === 'stock')
+```
+
+It is typed `string` rather than a union of those three, for the same reason as every other response enum
+here: a value added later would make the narrower type a lie. `addresses` holds the deposit addresses per
+network, `actions` which operations the account allows, and `description` and `market_cap` the display data
+the app shows.
+
 `pnl()` adds performance rather than position - absolute and percentage change over 24h and all time, per
 holding and as a total.
 

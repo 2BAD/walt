@@ -1,6 +1,9 @@
 export { normalizeTransaction, WalletAuthError, WalletClient, WalletRequestError } from '~/client.ts'
 export type {
   Account,
+  AccountAction,
+  AccountActions,
+  AccountAddress,
   AccountsResponse,
   ChartPoint,
   Charts,
