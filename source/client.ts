@@ -595,7 +595,56 @@ export class WalletClient {
     return this.walk((cursor) => this.accountTransactions(currency, limit, cursor))
   }
 
-  transactionDetails(id: number | string, gateway?: TransactionGateway): Promise<TransactionDetails> {
+  /**
+   * Looks up `transactionDetails()` for a stream of listing rows, keeping several lookups in
+   * flight and yielding in the order they arrived.
+   *
+   * Listing rows carry `pair_transaction_currency` but not `pair_transaction_amount`, so the
+   * second leg of an exchange only exists on the detail record. Anything that has to add up -
+   * a balance, a cost basis - needs this rather than the rows alone.
+   *
+   * Each row's `gateway` is passed through. It is optional for most gateways but not all:
+   * `xstocks_dividends` records 404 without it.
+   *
+   * A lookup that fails after its retries stops the walk. Nothing is skipped silently.
+   *
+   * @param transactions - Rows to look up, typically `allTransactions()`.
+   * @yields One detail record per row, in the order the rows arrived.
+   */
+  async *detailsFor(
+    transactions: AsyncIterable<Transaction> | Iterable<Transaction>
+  ): AsyncGenerator<TransactionDetails> {
+    const width = Math.max(1, Math.min(this.maxConcurrent, 32))
+    const inFlight: Promise<TransactionDetails>[] = []
+    try {
+      for await (const transaction of transactions) {
+        inFlight.push(this.transactionDetails(transaction.id, transaction.gateway))
+        while (inFlight.length >= width) {
+          const next = inFlight.shift()
+          if (next) yield await next
+        }
+      }
+      while (inFlight.length > 0) {
+        const next = inFlight.shift()
+        if (next) yield await next
+      }
+    } finally {
+      await Promise.allSettled(inFlight)
+    }
+  }
+
+  /**
+   * Optional for most gateways, but `xstocks_dividends` records 404 without it. Pass the
+   * `gateway` of the matching listing row whenever you have one.
+   *
+   * The parameter accepts any string, not just `TransactionGateway`, because a listing row's
+   * `gateway` is a plain string that may carry a value added since the request enum was derived.
+   *
+   * @param id - Transaction id from a listing row.
+   * @param gateway - That row's `gateway`.
+   * @returns The full record, far wider than the listing row.
+   */
+  transactionDetails(id: number | string, gateway?: TransactionGateway | (string & {})): Promise<TransactionDetails> {
     const query = gateway ? `?${new URLSearchParams({ transaction_gateway: gateway }).toString()}` : ''
     return this.get<TransactionDetails>(`/api/v1/transactions/details/${encodeURIComponent(String(id))}/${query}`)
   }

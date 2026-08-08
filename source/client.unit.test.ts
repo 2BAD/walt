@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  type Transaction,
   type TransactionDetails,
   type WalletClientOptions,
   normalizeTransaction,
@@ -597,6 +598,121 @@ describe('walletClient retries', () => {
     await all
     expect(fetchImpl).toHaveBeenCalledTimes(6)
     expect(peak).toBe(2)
+  })
+})
+
+describe('walletClient detailsFor', () => {
+  const rows = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({ id: 10000000000001 + index }) as Transaction)
+
+  const detailFetch = (onCall?: (id: string) => void) =>
+    vi.fn<typeof fetch>(async (input) => {
+      const id = String(input).split('/details/')[1]?.replace(/\/$/, '') ?? ''
+      onCall?.(id)
+      return jsonResponse({ id: Number(id), gateway: 'crypto_exchange' })
+    })
+
+  it('yields one detail per row, in the order the rows arrived', async () => {
+    expect.assertions(1)
+
+    const client = new WalletClient({ tokenProvider: async () => 'jwt.token.value', fetch: detailFetch() })
+    const seen = []
+    for await (const detail of client.detailsFor(rows(9))) seen.push(detail.id)
+
+    expect(seen).toStrictEqual([
+      10000000000001, 10000000000002, 10000000000003, 10000000000004, 10000000000005, 10000000000006, 10000000000007,
+      10000000000008, 10000000000009
+    ])
+  })
+
+  it('passes each row gateway through, which xstocks_dividends needs to resolve', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = detailFetch()
+    const client = new WalletClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
+    await Array.fromAsync(client.detailsFor([{ id: 10000000000001, gateway: 'xstocks_dividends' } as Transaction]))
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/api/v1/transactions/details/10000000000001/?transaction_gateway=xstocks_dividends'
+    )
+  })
+
+  it('keeps several lookups in flight rather than going one at a time', async () => {
+    expect.assertions(1)
+
+    let inFlight = 0
+    let peak = 0
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      inFlight--
+      const id = String(input).split('/details/')[1]?.replace(/\/$/, '') ?? ''
+      return jsonResponse({ id: Number(id) })
+    })
+
+    const client = new WalletClient({
+      tokenProvider: async () => 'jwt.token.value',
+      fetch: fetchImpl,
+      maxConcurrent: 4
+    })
+    await Array.fromAsync(client.detailsFor(rows(12)))
+
+    expect(peak).toBe(4)
+  })
+
+  it('accepts an async listing as well as an array', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      if (String(input).includes('/details/')) {
+        const id = String(input).split('/details/')[1]?.replace(/\/$/, '') ?? ''
+        return jsonResponse({ id: Number(id) })
+      }
+      const cursor = new URL(String(input)).searchParams.get('cursor')
+      return cursor === null
+        ? jsonResponse({ transactions: [{ id: 10000000000001 }], next_cursor: 'next' })
+        : jsonResponse({ transactions: [], next_cursor: 'endless' })
+    })
+
+    const client = new WalletClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
+    const seen = await Array.fromAsync(client.detailsFor(client.allTransactions()))
+
+    expect(seen.map((detail) => detail.id)).toStrictEqual([10000000000001])
+  })
+
+  it('stops the walk when a lookup keeps failing', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async (input) =>
+      String(input).includes('10000000000003') ? jsonResponse({}, 500) : jsonResponse({ id: 1 })
+    )
+
+    const client = new WalletClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
+
+    await expect(Array.fromAsync(client.detailsFor(rows(6)))).rejects.toThrow('failed (500)')
+  })
+
+  it('settles outstanding lookups when the consumer stops early', async () => {
+    expect.assertions(2)
+
+    const rejections: unknown[] = []
+    const onRejection = (reason: unknown) => rejections.push(reason)
+    process.on('unhandledRejection', onRejection)
+
+    const fetchImpl = vi.fn<typeof fetch>(async (input) =>
+      String(input).includes('10000000000004') ? jsonResponse({}, 500) : jsonResponse({ id: 1 })
+    )
+    const client = new WalletClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
+
+    for await (const detail of client.detailsFor(rows(8))) {
+      expect(detail.id).toBe(1)
+      break
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    process.off('unhandledRejection', onRejection)
+
+    expect(rejections).toStrictEqual([])
   })
 })
 

@@ -181,8 +181,22 @@ while (page.transactions.length > 0 && page.next_cursor !== null) {
 ```
 
 `transactionDetails()` returns a much wider record than a list row - fees, exchange rate, the paired side of a
-conversion, on-chain destination and hash. Its `gateway` argument is optional and narrows the lookup to one
-transaction type; the `gateway` field of a list row is the value to pass.
+conversion, on-chain destination and hash. Pass the `gateway` of the matching list row: it is optional for
+most gateways, but an `xstocks_dividends` record returns 404 without it. The argument accepts any string, not
+only the values in `TransactionGateway`, because a list row's `gateway` may carry one added since.
+
+To hydrate a whole listing, `detailsFor()` looks up several at a time and yields in the order the rows
+arrived:
+
+```ts
+for await (const details of client.detailsFor(client.allTransactions(100))) {
+  const { received, sent } = normalizeTransaction(details)
+}
+```
+
+It takes an array just as happily as a listing, so you can filter first. `maxConcurrent` governs how many
+lookups run at once. A lookup that still fails after its retries stops the walk rather than skipping a row,
+so a summed result is never quietly short.
 
 ### Reading a transaction
 
