@@ -569,6 +569,67 @@ export type PnlResponse = {
   total: PnlTotals
 }
 
+/**
+ * Every currency that can be exchanged, keyed by the currency, listing what it can be
+ * exchanged with. Both directions of a pair are listed, so `BTC` names `USDT` and `USDT`
+ * names `BTC`.
+ */
+export type AvailableExchanges = Record<string, string[]>
+
+/**
+ * What `from_amount` of `from_currency` converts into right now, before the fee.
+ *
+ * Unlike every other response here the amounts are numbers, not decimal strings. `min_amount`
+ * and `max_amount` bound `from_amount`; `max_amount` is the balance when selling and the
+ * platform limit when buying, so a quote for `0` still returns both.
+ */
+export type ExchangeQuote = {
+  from_amount: number
+  from_currency: string
+  to_amount: number
+  to_currency: string
+  rate: number
+  min_amount: number
+  max_amount: number
+}
+
+export type ExchangeRequest = {
+  from_currency: string
+  to_currency: string
+  from_amount: number
+  local_currency: FiatCurrency
+  /** True when `from_amount` is the whole balance, which the app sets when selling everything. */
+  max_amount?: boolean
+}
+
+/** A completed exchange. `ttl` is in seconds and `price_deviation_percent` is a decimal string. */
+export type Exchange = {
+  uid: string
+  transfer_id: string
+  ttl: number
+  from_amount: number
+  from_balance_after: number
+  from_currency: string
+  to_amount: number
+  to_balance_after: number
+  to_currency: string
+  from_fiat_amount: number
+  from_fiat_currency: string
+  to_fiat_amount: number
+  to_fiat_currency: string
+  rate: number
+  fee_amount: number
+  fee_currency: string
+  fee_fiat_amount: number
+  fee_fiat_currency: string
+  new_rates: boolean
+  non_promo_fee_amount: unknown
+  non_promo_fee_currency: unknown
+  promo_fee: unknown
+  max_amount: boolean
+  price_deviation_percent: string
+}
+
 export class WalletAuthError extends Error {}
 
 export class WalletRequestError extends Error {
@@ -671,45 +732,57 @@ export class WalletClient {
     this.waiting.shift()?.()
   }
 
-  private async send<T>(path: string, allowRefresh: boolean): Promise<T> {
+  private async send<T>(path: string, body: unknown, allowRefresh: boolean): Promise<T> {
     const token = await this.ensureToken()
+    const method = body === undefined ? 'GET' : 'POST'
+    const headers: Record<string, string> = {
+      ...BROWSER_HEADERS,
+      authorization: token,
+      referer: this.referer,
+      baggage: this.baggage,
+      'sentry-trace': `${this.traceId}-${hex(8)}-0`,
+      traceparent: `00-${hex(16)}-${hex(8)}-01`
+    }
+    if (method === 'POST') {
+      headers['content-type'] = 'application/json'
+      headers['origin'] = this.baseUrl
+    }
     let response: Response
     try {
       response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-        headers: {
-          ...BROWSER_HEADERS,
-          authorization: token,
-          referer: this.referer,
-          baggage: this.baggage,
-          'sentry-trace': `${this.traceId}-${hex(8)}-0`,
-          traceparent: `00-${hex(16)}-${hex(8)}-01`
-        }
+        method,
+        headers,
+        body: method === 'POST' ? JSON.stringify(body) : null
       })
     } catch (cause) {
-      throw new WalletRequestError(`GET ${path} failed (no response)`, 0, null, { cause })
+      throw new WalletRequestError(`${method} ${path} failed (no response)`, 0, null, { cause })
     }
     if (response.status === 401) {
       if (allowRefresh) {
         this.token = null
-        return this.send<T>(path, false)
+        return this.send<T>(path, body, false)
       }
       throw new WalletAuthError('token rejected after refresh')
     }
     if (!response.ok) {
-      throw new WalletRequestError(`GET ${path} failed (${response.status})`, response.status, retryAfterOf(response))
+      throw new WalletRequestError(
+        `${method} ${path} failed (${response.status})`,
+        response.status,
+        retryAfterOf(response)
+      )
     }
     return (await response.json()) as T
   }
 
-  private async get<T>(path: string): Promise<T> {
+  private async request<T>(path: string, body: unknown, retries: number): Promise<T> {
     await this.acquire()
     try {
       for (let attempt = 0; ; attempt++) {
         try {
-          return await this.send<T>(path, true)
+          return await this.send<T>(path, body, true)
         } catch (error) {
           const transient = error instanceof WalletRequestError && RETRYABLE_STATUS.has(error.status)
-          if (!transient || attempt >= this.retries) throw error
+          if (!transient || attempt >= retries) throw error
           const backoff = Math.min(MAX_RETRY_DELAY_MS, this.retryDelayMs * 2 ** attempt)
           await sleep(error.retryAfterMs ?? backoff / 2 + Math.random() * (backoff / 2))
         }
@@ -717,6 +790,10 @@ export class WalletClient {
     } finally {
       this.release()
     }
+  }
+
+  private get<T>(path: string): Promise<T> {
+    return this.request<T>(path, undefined, this.retries)
   }
 
   accounts(): Promise<AccountsResponse> {
@@ -905,6 +982,40 @@ export class WalletClient {
       time: time instanceof Date ? time.toISOString() : String(time)
     })
     return this.get<PriceAtTime>(`/api/v1/exchange_rates/price_for_fiat_at_time/?${query.toString()}`)
+  }
+
+  availableExchanges(): Promise<AvailableExchanges> {
+    return this.get<AvailableExchanges>('/api/v1/exchange/get-available-exchanges/')
+  }
+
+  /**
+   * Prices an exchange without performing it. This is the rate a `createExchange()` would
+   * execute at, spread included, which the display rates on `coins()` and `accounts()` are not.
+   * An amount of `0` returns the rate and the limits alone.
+   *
+   * @param fromCurrency - What is paid.
+   * @param toCurrency - What is received.
+   * @param fromAmount - How much of `fromCurrency` to price, within the quote's own `min_amount` and `max_amount`.
+   */
+  quote(fromCurrency: string, toCurrency: string, fromAmount: number): Promise<ExchangeQuote> {
+    return this.request<ExchangeQuote>(
+      '/api/v1/exchange/convert/',
+      { from_amount: fromAmount, from_currency: fromCurrency, to_currency: toCurrency },
+      this.retries
+    )
+  }
+
+  /**
+   * Performs an exchange. This moves real money and is not undone by anything in this client.
+   *
+   * It is the one request that is never retried: a timeout or a 502 after the server has
+   * committed the trade would otherwise execute it twice. Check `WalletRequestError.status`
+   * against the account's balances before trying again by hand.
+   *
+   * @param request - The exchange, in the shape the API takes it.
+   */
+  createExchange(request: ExchangeRequest): Promise<Exchange> {
+    return this.request<Exchange>('/api/v1/exchange/create_exchange/', request, 0)
   }
 
   /**

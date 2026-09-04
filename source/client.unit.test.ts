@@ -901,3 +901,125 @@ describe('normalizeTransaction', () => {
     expect(normalizeTransaction(detailsOf({})).fee).toBeNull()
   })
 })
+
+describe('walletClient exchange', () => {
+  const quoteResponse = {
+    from_amount: 1,
+    from_currency: 'USDT',
+    to_amount: 0.0172,
+    to_currency: 'XLEx',
+    rate: 0.0172,
+    min_amount: 1.1,
+    max_amount: 25000
+  }
+
+  it('reads the available pairs with a plain GET', async () => {
+    expect.assertions(3)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ BTC: ['TON', 'USDT'] }))
+    const pairs = await makeClient(fetchImpl).availableExchanges()
+    const [url, options] = fetchImpl.mock.calls[0] ?? []
+
+    expect(url).toContain('/api/v1/exchange/get-available-exchanges/')
+    expect(options?.method).toBe('GET')
+    expect(pairs).toStrictEqual({ BTC: ['TON', 'USDT'] })
+  })
+
+  it('posts a quote as json with the origin the web app sends', async () => {
+    expect.assertions(5)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(quoteResponse))
+    await makeClient(fetchImpl).quote('USDT', 'XLEx', 1)
+    const [url, options] = fetchImpl.mock.calls[0] ?? []
+
+    expect(url).toContain('/api/v1/exchange/convert/')
+    expect(options?.method).toBe('POST')
+    expect(headersOf(fetchImpl)['content-type']).toBe('application/json')
+    expect(headersOf(fetchImpl)['origin']).toBe('https://walletbot.me')
+    expect(JSON.parse(String(options?.body))).toStrictEqual({
+      from_amount: 1,
+      from_currency: 'USDT',
+      to_currency: 'XLEx'
+    })
+  })
+
+  it('does not send a body or an origin on a GET', async () => {
+    expect.assertions(3)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
+    await makeClient(fetchImpl).accounts()
+    const [, options] = fetchImpl.mock.calls[0] ?? []
+
+    expect(options?.body).toBeNull()
+    expect(headersOf(fetchImpl)['origin']).toBeUndefined()
+    expect(headersOf(fetchImpl)['content-type']).toBeUndefined()
+  })
+
+  it('sends the whole exchange request through unchanged', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ uid: 'u', ttl: 20 }))
+    const request = {
+      from_currency: 'XLEx',
+      to_currency: 'USDT',
+      from_amount: 4.5,
+      local_currency: 'USD' as const,
+      max_amount: true
+    }
+    await makeClient(fetchImpl).createExchange(request)
+    const [url, options] = fetchImpl.mock.calls[0] ?? []
+
+    expect(url).toContain('/api/v1/exchange/create_exchange/')
+    expect(JSON.parse(String(options?.body))).toStrictEqual(request)
+  })
+
+  it('retries a quote on a transient status', async () => {
+    expect.assertions(2)
+
+    const responses = [jsonResponse({}, 503), jsonResponse(quoteResponse)]
+    const fetchImpl = vi.fn<typeof fetch>(async () => responses.shift() ?? jsonResponse({}, 500))
+    const client = new WalletClient({ tokenProvider: async () => 'jwt', fetch: fetchImpl, retryDelayMs: 0 })
+
+    await expect(client.quote('USDT', 'XLEx', 0)).resolves.toStrictEqual(quoteResponse)
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('never retries an exchange, whatever the retry setting', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}, 503))
+    const client = new WalletClient({ tokenProvider: async () => 'jwt', fetch: fetchImpl, retries: 3, retryDelayMs: 0 })
+    const request = { from_currency: 'USDT', to_currency: 'XLEx', from_amount: 1, local_currency: 'USD' as const }
+
+    await expect(client.createExchange(request)).rejects.toBeInstanceOf(WalletRequestError)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('replays the body when the token is refreshed on a 401', async () => {
+    expect.assertions(3)
+
+    const tokens = ['stale', 'fresh']
+    const tokenProvider = vi.fn<() => Promise<string>>(async () => tokens.shift() ?? 'fresh')
+    const fetchImpl = vi.fn<typeof fetch>(async (_url, options) => {
+      const auth = (options?.headers as Record<string, string> | undefined)?.['authorization']
+      return auth === 'fresh' ? jsonResponse(quoteResponse) : jsonResponse({ code: 'token_corrupted' }, 401)
+    })
+
+    await new WalletClient({ tokenProvider, fetch: fetchImpl }).quote('USDT', 'XLEx', 1)
+    const bodies = fetchImpl.mock.calls.map(([, options]) => String(options?.body))
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(bodies[0]).toBe(bodies[1])
+    expect(headersOf(fetchImpl, 1)['authorization']).toBe('fresh')
+  })
+
+  it('names the method in the error', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ detail: 'bad' }, 422))
+
+    await expect(makeClient(fetchImpl).quote('USDT', 'XLEx', 1)).rejects.toThrow(
+      'POST /api/v1/exchange/convert/ failed (422)'
+    )
+  })
+})
