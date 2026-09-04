@@ -1,7 +1,7 @@
 {
   "name": "@2bad/wallet",
   "version": "0.1.0",
-  "description": "Read-only client for the Telegram Wallet API to track a crypto portfolio",
+  "description": "Client for the Telegram Wallet API to track a crypto portfolio and exchange between assets",
   "keywords": [
     "telegram",
     "wallet",

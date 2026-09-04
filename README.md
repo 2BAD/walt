@@ -1,7 +1,7 @@
 # @2bad/wallet
 
-Read-only client for the Telegram Wallet API. Fetches balances, coin rates and charts, transaction history,
-profit and loss, and a rolled-up portfolio.
+Client for the Telegram Wallet API. Fetches balances, coin rates and charts, transaction history, profit and
+loss, and a rolled-up portfolio, and can quote and perform exchanges between assets.
 
 ## Install
 
@@ -88,8 +88,9 @@ const details = await Promise.all(ids.map((id) => client.transactionDetails(id))
 
 ## API
 
-Every method is a typed GET. Only `portfolio()` derives anything; the rest hand back what the API returned,
-with response fields kept in the API's own `snake_case`.
+Every method is a thin typed call, and all but `quote()` and `createExchange()` are GETs. Only `portfolio()`
+derives anything; the rest hand back what the API returned, with response fields kept in the API's own
+`snake_case`.
 
 ### Balances
 
@@ -197,6 +198,45 @@ const fiat = await client.localCurrency()
 const { all } = await client.charts('TON', fiat)
 const then = await client.priceForFiatAtTime('TON', fiat, 100, new Date('2026-01-01'))
 ```
+
+### Exchange
+
+```ts
+availableExchanges(): Promise<AvailableExchanges>
+quote(fromCurrency: string, toCurrency: string, fromAmount: number): Promise<ExchangeQuote>
+createExchange(request: ExchangeRequest): Promise<Exchange>
+```
+
+`availableExchanges()` maps every currency to what it can be exchanged with. Nearly everything pairs with
+`TON` and `USDT`, on-chain coins also with `XLM`, and the list is what the app offers rather than what the
+server enforces: it quoted `BTC` to `ETH` although neither lists the other.
+
+`quote()` prices an exchange without performing it. The `rate` it returns is the one an exchange executes at,
+with the spread already in it, so it is the number to watch for a price trigger rather than the display rate
+on `coins()` or `accounts()`. `min_amount` and `max_amount` bound `from_amount`; `max_amount` is the balance
+when selling and the platform limit when buying. An amount of `0` returns the rate and the limits alone, and
+the server does not reject an amount under the minimum at this step, only one over the maximum with a 400.
+
+```ts
+const { rate, min_amount, max_amount } = await client.quote('USDT', 'NVDAx', 0)
+```
+
+`createExchange()` performs an exchange and moves real money. It executes immediately, with no confirm step,
+and the response carries both balances after the trade, the fee, and the `rate` it filled at. It is the one
+request the client never retries, because a timeout after the server has committed the trade would otherwise
+execute it twice. If it throws `WalletRequestError`, check the balances before trying again.
+
+```ts
+const filled = await client.createExchange({
+  from_currency: 'USDT',
+  to_currency: 'NVDAx',
+  from_amount: 25,
+  local_currency: 'USD'
+})
+```
+
+`max_amount: true` marks a sale of the whole balance, which is what the app sends when selling everything.
+Amounts in these three responses are numbers, unlike the decimal strings everywhere else in the API.
 
 ### Transactions
 
