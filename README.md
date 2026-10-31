@@ -5,13 +5,10 @@
 [![Code coverage](https://img.shields.io/codecov/c/github/2BAD/walt)](https://codecov.io/gh/2BAD/walt)
 [![GitHub Build Status](https://img.shields.io/github/actions/workflow/status/2BAD/walt/build.yml)](https://github.com/2BAD/walt/actions/workflows/build.yml)
 
-Client for Walt, the crypto app in Telegram formerly called Wallet.
+Client for Walt, the crypto app in Telegram (ex @wallet).
 
 - Balances, staking, prices, charts and transaction history
 - Exchange quotes and exchanges between assets
-- Signs in with your Telegram session and renews tokens on its own
-- Retries and paces requests to stay under the rate limit
-- TypeScript types checked against real responses
 
 ## Install
 
@@ -31,6 +28,7 @@ const client = new WaltClient({ tokenProvider: () => source.token() })
 
 const { entries, total, fiatCurrency } = await client.portfolio()
 console.log(entries[0], total, fiatCurrency) // { currency: 'TON', amount: '120.5', fiatValue: 381.2 } 1250.4 USD
+await source.disconnect()
 ```
 
 ## Examples
