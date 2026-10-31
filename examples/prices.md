@@ -8,22 +8,16 @@ const coins = await client.coins(fiat)
 
 ## Fiat currency
 
-Every price method takes a `FiatCurrency`. There is no default.
-
-`localCurrency()` returns the account's own.
+Price methods need a `FiatCurrency`. `localCurrency()` returns the one the account uses.
 
 ## `charts()`
 
-Returns five series in one response: `day`, `week`, `month`, `year` and `all`.
-
 ```ts
-const { week } = await client.charts('TON', 'USD')
+const { day, week, month, year, all } = await client.charts('TON', 'USD')
 // week[0]  { rate: '3.21', timestamp: 1767225600 }
 ```
 
 ## `priceForFiatAtTime()`
-
-Values an amount at a past moment.
 
 ```ts
 const then = await client.priceForFiatAtTime('TON', 'USD', 100, new Date('2026-01-01'))
@@ -31,4 +25,4 @@ const then = await client.priceForFiatAtTime('TON', 'USD', 100, new Date('2026-0
 
 ## `coinDetails()`
 
-Returns the description, networks and trading hours of one coin.
+Description, networks and trading hours of one coin.

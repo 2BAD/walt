@@ -13,23 +13,20 @@ try {
 
 ## `WaltRequestError`
 
-A failed request throws `WaltRequestError`. Its `status` is `0` when there was no response.
+`status` is `0` when there was no response.
 
 ## `WaltAuthError`
 
-On a 401 the client fetches a new token and replays the request once. If that is rejected too, it throws
-`WaltAuthError`.
+Thrown when the API rejects a freshly fetched token.
 
 ## Retries
 
-429, 502, 503, 504 and requests with no response are retried with exponential backoff. A `retry-after` header from
-the server replaces the backoff.
+429, 502, 503, 504 and network failures are retried.
 
-500 is not retried. The API returns it for bad requests, such as a malformed cursor.
+A 500 is not retried. It means a bad request, such as a malformed cursor.
 
 `createExchange()` is never retried.
 
 ## Flood wait
 
-`TelegramTokenSource` waits out a Telegram `FLOOD_WAIT` once when it is shorter than `maxFloodWaitMs`. A longer one
-throws.
+A Telegram `FLOOD_WAIT` longer than `maxFloodWaitMs` throws.

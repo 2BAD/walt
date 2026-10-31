@@ -10,37 +10,31 @@ for (const { currency, amount, fiatValue } of entries) {
 
 ## `portfolio()`
 
-Returns balances above zero, sorted by fiat value, with the total and the account's display currency.
+Entries are sorted by fiat value. Zero balances are left out.
 
-The entries do not add up to `total`. The total also covers staked funds, which have no entry of their own.
+`total` is the figure the Walt app shows. Staked funds count in `total` but have no entry.
 
 ```ts
-const { entriesTotal, total, staked } = await client.portfolio()
-// entriesTotal  sum of the entries
-// total         the figure the Walt app shows
-// staked        total - entriesTotal
+const { total, entriesTotal, staked } = await client.portfolio()
+// 1250.4 1200.1 50.3
 ```
 
-Expect a few cents of rounding in `staked` when nothing is staked.
+`staked` can be a few cents when nothing is staked.
 
 ## `accounts()`
 
-Returns every currency the account can hold, zero balances included.
-
-Group by `category` rather than by ticker. Values seen so far are `onchain`, `stock` and `etf`.
+Lists every currency, zero balances included. `category` is `onchain`, `stock` or `etf`.
 
 ```ts
 const { accounts } = await client.accounts()
 const stocks = accounts.filter((account) => account.category === 'stock')
 ```
 
-`addresses` holds deposit addresses per network. `actions` lists the operations the account allows.
-
 ## `pnl()`
 
-Returns absolute and percentage change over 24h and all time, per holding and in total.
+24h and all-time change, per holding and in total.
 
-Staked positions have an `account_type` other than `bank_account`.
+To leave out staked positions, keep the rows whose `account_type` is `bank_account`.
 
 ## Staked funds
 
@@ -50,18 +44,13 @@ const joined = campaigns.filter((campaign) => campaign.account !== null)
 // joined[0].account.balance  '50.000000'
 ```
 
-`earnCampaigns()` returns every campaign. `account` is set only on the ones this wallet has joined.
+`earnRate()` prices staking assets that `coins()` does not, such as `USDe`.
 
-`earnRate()` prices staking assets that `coins()` does not quote, such as `USDe`. Its `depeg_info` shows how far a
-stablecoin is off its peg.
+`earnCampaignTransactions()` lists deposits, withdrawals and payouts in one campaign. It returns the first page only.
 
-`earnCampaignTransactions()` returns deposits, withdrawals and payouts inside a campaign. It returns the first page
-only.
+## Frozen and unconfirmed
 
-## Unverified shapes
-
-`frozenBalances()` and `unconfirmedTransactions()` take a type parameter for their rows. No row has been observed
-yet.
+No rows have been seen for `frozenBalances()` or `unconfirmedTransactions()`. Pass your own row type.
 
 ```ts
 const frozen = await client.frozenBalances<{ currency: string; amount: string }>()

@@ -10,7 +10,7 @@ const tonRows = await Array.fromAsync(client.allAccountTransactions('TON'))
 
 ## Pages
 
-To read one page at a time, pass back the `next_cursor` of the previous page. Stop when a page comes back empty.
+Stop on an empty page. `next_cursor` is still set after the last one.
 
 ```ts
 let page = await client.transactions(undefined, 50)
@@ -19,23 +19,17 @@ while (page.transactions.length > 0 && page.next_cursor !== null) {
 }
 ```
 
-Do not loop on `next_cursor` alone. The API keeps returning one past the last row.
-
-Pass back only cursors the API gave you. A malformed cursor is a 500.
-
 ## `transactionDetails()`
 
-Returns fees, exchange rate, the paired side of a conversion, and the on-chain destination and hash.
+Fees, rates, both sides of a conversion and the on-chain hash.
 
 ```ts
 const details = await client.transactionDetails(row.id, row.gateway)
 ```
 
-Pass the `gateway` of the list row. An `xstocks_dividends` record is a 404 without it.
+Pass the row's `gateway`. Some records, such as `xstocks_dividends`, are a 404 without it.
 
 ## `detailsFor()`
-
-Fetches details for many transactions, in the order they arrived.
 
 ```ts
 for await (const details of client.detailsFor(client.allTransactions(100))) {
@@ -43,13 +37,11 @@ for await (const details of client.detailsFor(client.allTransactions(100))) {
 }
 ```
 
-It also takes an array. `maxConcurrent` sets how many lookups run at once.
+Takes an array or an async iterable. Results keep the input order.
 
-A lookup that still fails after its retries stops the walk. A summed result is never short a row.
+A lookup that fails after its retries throws and ends the loop.
 
 ## `normalizeTransaction()`
-
-Turns a details record into what the wallet received, sent and paid in fees.
 
 ```ts
 import { normalizeTransaction } from '@2bad/walt'
@@ -59,11 +51,8 @@ const { received, sent, fee } = normalizeTransaction(details)
 // sent      { currency: 'BTC', amount: '0.010000000000' }
 ```
 
-It needs a `transactionDetails()` record. List rows lack the amount of the second leg.
-
-Do not subtract `fee` from `received`. It has already been taken out.
+`received` already has `fee` taken out.
 
 ## Staking
 
-Moves inside earn campaigns are in `earnCampaignTransactions()`, not here. `transactions()` sees only the spot side of
-a move into or out of earn.
+Moves inside earn campaigns are listed by `earnCampaignTransactions()`, not `transactions()`.
