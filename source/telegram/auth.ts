@@ -27,7 +27,7 @@ export type TelegramTokenSourceOptions = {
   deviceSerial?: string
   baseUrl?: string
   fetch?: typeof fetch
-  /** Keeps the token between runs. Defaults to a file in the user's cache directory, `false` keeps it in memory. */
+  /** Defaults to a file in the user cache directory; `false` keeps the token in memory. */
   storage?: TokenStorage | false
   maxFloodWaitMs?: number
 }

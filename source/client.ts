@@ -117,7 +117,7 @@ export type PriceAtTime = {
 }
 
 export type AccountAddress = {
-  /** Null until the address is created, which is what `is_created` on the account reports. */
+  /** Null until the account `is_created`. */
   address: string | null
   network: string
   network_code: string
@@ -142,7 +142,7 @@ export type AccountActions = {
 export type Account = {
   currency: string
   account_type: string
-  /** `onchain`, `stock` or `etf` on the account this was derived from. Left wide, see the readme. */
+  /** For example `onchain`, `stock` or `etf`. */
   category: string
   description: string | null
   market_cap: string | null
@@ -300,16 +300,10 @@ export type PortfolioEntry = {
 export type Portfolio = {
   /** Spot balances above zero, largest fiat value first. */
   entries: PortfolioEntry[]
-  /** What `entries` add up to. */
   entriesTotal: number
-  /** The API's own total, which counts staked funds that have no `accounts()` row. */
+  /** The API's own total, which includes staked funds. */
   total: number
-  /**
-   * `total - entriesTotal`, so whatever the API counts that it did not hand back a row for.
-   * On the account these types came from that was the earn balance to within 0.03%, and
-   * `earnCampaigns()` itemises it. Expect a few cents either way from rounding when nothing
-   * is staked.
-   */
+  /** `total - entriesTotal`, itemised by `earnCampaigns()`. */
   staked: number
   fiatCurrency: string
 }
@@ -322,7 +316,7 @@ export type TransactionDetails = {
   gateway: string
   crypto_amount: string
   crypto_currency: string
-  /** Null on the gateways that never priced the transaction: `p2p_order`, `withdraw_onchain`, `top_up`. */
+  /** Null when the transaction was never priced. */
   local_fiat_amount: string | null
   local_fiat_amount_now: string
   local_currency: string
@@ -340,7 +334,7 @@ export type TransactionDetails = {
   recipient_wallet_address: string | null
   network: string | null
   crypto_tx_id: string | null
-  /** Block explorer url for `crypto_tx_id`, and present on the same records. */
+  /** Block explorer url for `crypto_tx_id`. */
   transaction_link: string | null
   photo_url: string | null
   gateway_details: unknown
@@ -361,25 +355,16 @@ export type NormalizedTransaction = {
   status: string
   received: TransactionLeg | null
   sent: TransactionLeg | null
-  /** Already deducted from `received`, so adding it back would double count. Reporting only. */
+  /** Already deducted from the legs; reporting only. */
   fee: TransactionLeg | null
 }
 
 /**
- * Splits a transaction into what entered the wallet, what left it, and the fee.
+ * Splits a `transactionDetails()` record into what entered the wallet, what left it, and the fee.
+ * A `deposit` of USDT paired with BTC is a sale of BTC. Listing rows lack `pair_transaction_amount`,
+ * so they cannot be normalised.
  *
- * Three things about the raw shape make this easy to get backwards. `type` is relative to the
- * wallet, so a `deposit` of USDT against a `pair_transaction_currency` of BTC is a sale of BTC
- * rather than a purchase. `pair_transaction_*` is a genuine second leg only when its currency
- * differs from `crypto_currency`; on every gateway but `crypto_exchange` it repeats the same
- * asset back, sometimes with a gross amount against a net `crypto_amount`. And `crypto_amount`
- * is already net of `fee_amount`.
- *
- * Needs a `transactionDetails()` record. A listing row carries `pair_transaction_currency` but
- * not `pair_transaction_amount`, so the second leg cannot be recovered from it.
- *
- * @param details - A single record from `transactionDetails()`.
- * @returns The same transaction as directional legs.
+ * @param details - A `transactionDetails()` record.
  */
 export const normalizeTransaction = (details: TransactionDetails): NormalizedTransaction => {
   const main = { currency: details.crypto_currency, amount: details.crypto_amount }
@@ -419,7 +404,7 @@ export type Charts = {
 }
 
 export type EarnAccount = {
-  /** Units staked in this campaign. There is no `accounts()` row for it. */
+  /** Units staked in this campaign, absent from `accounts()`. */
   balance: string
   paid_out_amount: string
   currency: string
@@ -466,10 +451,10 @@ export type EarnAmount = {
 
 export type EarnCampaign = {
   campaign_id: number
-  /** Matches `PnlPosition.earn_campaign_name`, which is how a pnl row maps back to a campaign. */
+  /** Matches `PnlPosition.earn_campaign_name`. */
   name: string
   status: string
-  /** Null unless this account has joined the campaign. */
+  /** Null unless the campaign was joined. */
   account: EarnAccount | null
   apy_type: string
   current_apy: string
@@ -544,7 +529,7 @@ export type EarnRate = {
 export type PnlPosition = {
   currency: string
   fiat_currency: string
-  /** Cost basis, not value - add `absolute_all_time`. Re-priced from historical rates that carry bad prints. */
+  /** Cost basis, not current value; add `absolute_all_time` for that. */
   current_value_in_fiat: string
   absolute_24h: string
   percentage_24h: string
@@ -556,7 +541,7 @@ export type PnlPosition = {
 
 export type PnlTotals = {
   fiat_currency: string
-  /** Cost basis, not current value - add `absolute_all_time` for that. */
+  /** Cost basis, not current value; add `absolute_all_time` for that. */
   current_value_in_fiat: string
   absolute_24h: string
   percentage_24h: string
@@ -569,19 +554,12 @@ export type PnlResponse = {
   total: PnlTotals
 }
 
-/**
- * Every currency that can be exchanged, keyed by the currency, listing what it can be
- * exchanged with. Both directions of a pair are listed, so `BTC` names `USDT` and `USDT`
- * names `BTC`.
- */
+/** Each exchangeable currency mapped to its counterparts. Pairs appear in both directions. */
 export type AvailableExchanges = Record<string, string[]>
 
 /**
- * What `from_amount` of `from_currency` converts into right now, before the fee.
- *
- * Unlike every other response here the amounts are numbers, not decimal strings. `min_amount`
- * and `max_amount` bound `from_amount`; `max_amount` is the balance when selling and the
- * platform limit when buying, so a quote for `0` still returns both.
+ * Amounts are numbers, not decimal strings. `min_amount` and `max_amount` bound `from_amount`;
+ * `max_amount` is the balance when selling and the platform limit when buying.
  */
 export type ExchangeQuote = {
   from_amount: number
@@ -598,11 +576,11 @@ export type ExchangeRequest = {
   to_currency: string
   from_amount: number
   local_currency: FiatCurrency
-  /** True when `from_amount` is the whole balance, which the app sets when selling everything. */
+  /** Set when `from_amount` is the whole balance. */
   max_amount?: boolean
 }
 
-/** A completed exchange. `ttl` is in seconds and `price_deviation_percent` is a decimal string. */
+/** `ttl` is in seconds. */
 export type Exchange = {
   uid: string
   transfer_id: string
@@ -635,7 +613,7 @@ export class WaltAuthError extends Error {}
 export class WaltRequestError extends Error {
   /** HTTP status, or `0` when the request never got a response. */
   readonly status: number
-  /** Parsed from `retry-after` when the server sent one as a whole number of seconds. */
+  /** From a `retry-after` given in seconds. */
   readonly retryAfterMs: number | null
 
   constructor(message: string, status: number, retryAfterMs: number | null, options?: ErrorOptions) {
@@ -645,10 +623,6 @@ export class WaltRequestError extends Error {
   }
 }
 
-/**
- * Statuses worth trying again. 500 is deliberately absent: this API answers a malformed cursor
- * with one, so it means a bad request rather than a bad moment.
- */
 const RETRYABLE_STATUS = new Set([0, 429, 502, 503, 504])
 
 const MAX_RETRY_DELAY_MS = 30_000
@@ -825,20 +799,11 @@ export class WaltClient {
     return this.get<TransactionsPage>(`/api/v1/transactions/single-account/?${query.toString()}`)
   }
 
-  /**
-   * Walks a transaction listing to its end.
-   *
-   * Past the last row the API keeps handing back a fresh `next_cursor` with an empty `transactions`
-   * array, so an empty page is the only reliable stop signal - looping until `next_cursor` is null
-   * never terminates.
-   *
-   * @param page - Fetches one page, given the cursor the previous page returned.
-   * @yields Each transaction, oldest page last, in the order the API returns them.
-   */
   private async *walk(page: (cursor?: string) => Promise<TransactionsPage>): AsyncGenerator<Transaction> {
     let cursor: string | undefined
     for (;;) {
       const current = await page(cursor)
+      // past the last row the API still returns a next_cursor, with an empty page
       if (current.transactions.length === 0) return
       yield* current.transactions
       if (current.next_cursor === null) return
@@ -855,20 +820,11 @@ export class WaltClient {
   }
 
   /**
-   * Looks up `transactionDetails()` for a stream of listing rows, keeping several lookups in
-   * flight and yielding in the order they arrived.
+   * `transactionDetails()` for each listing row, several in flight, yielded in input order.
+   * A lookup that still fails after its retries ends the iteration.
    *
-   * Listing rows carry `pair_transaction_currency` but not `pair_transaction_amount`, so the
-   * second leg of an exchange only exists on the detail record. Anything that has to add up -
-   * a balance, a cost basis - needs this rather than the rows alone.
-   *
-   * Each row's `gateway` is passed through. It is optional for most gateways but not all:
-   * `xstocks_dividends` records 404 without it.
-   *
-   * A lookup that fails after its retries stops the walk. Nothing is skipped silently.
-   *
-   * @param transactions - Rows to look up, typically `allTransactions()`.
-   * @yields One detail record per row, in the order the rows arrived.
+   * @param transactions - Listing rows, typically `allTransactions()`.
+   * @yields One detail record per row.
    */
   async *detailsFor(
     transactions: AsyncIterable<Transaction> | Iterable<Transaction>
@@ -895,15 +851,8 @@ export class WaltClient {
   }
 
   /**
-   * Optional for most gateways, but `xstocks_dividends` records 404 without it. Pass the
-   * `gateway` of the matching listing row whenever you have one.
-   *
-   * The parameter accepts any string, not just `TransactionGateway`, because a listing row's
-   * `gateway` is a plain string that may carry a value added since the request enum was derived.
-   *
    * @param id - Transaction id from a listing row.
-   * @param gateway - That row's `gateway`.
-   * @returns The full record, far wider than the listing row.
+   * @param gateway - The row's `gateway`. Some records, such as `xstocks_dividends`, 404 without it.
    */
   transactionDetails(id: number | string, gateway?: TransactionGateway | (string & {})): Promise<TransactionDetails> {
     const query = gateway ? `?${new URLSearchParams({ transaction_gateway: gateway }).toString()}` : ''
@@ -919,25 +868,13 @@ export class WaltClient {
     return this.get<T[]>('/api/v1/accounts/frozen')
   }
 
-  /**
-   * Every earn campaign, with `account` populated on the ones this wallet has joined.
-   *
-   * This is the staked side that `accounts()` leaves out. Its rows are all `bank_account`, while
-   * `available_balance_total_fiat_amount` counts staked funds too, so the entries never add up to
-   * the total on their own. `account.balance` is the missing quantity, per campaign.
-   *
-   * The trailing slash matters: without it the request is rejected.
-   */
+  /** Every earn campaign. Staked balances are here, not in `accounts()`. */
   earnCampaigns(): Promise<EarnCampaignsResponse> {
     return this.get<EarnCampaignsResponse>('/earn/public-api/v1/campaigns/')
   }
 
   /**
-   * Deposits, withdrawals and payouts within one campaign.
-   *
-   * These do not appear in `transactions()`, which sees only the spot side of a move into or out
-   * of earn. The response carries three separate cursors, one per source, which this does not yet
-   * follow - it returns the first page.
+   * Deposits, withdrawals and payouts within one campaign. First page only.
    *
    * @param campaignId - `campaign_id` from `earnCampaigns()`.
    */
@@ -947,12 +884,6 @@ export class WaltClient {
     )
   }
 
-  /**
-   * Conversion rate between a staking pair, with how far a stablecoin has drifted from its peg.
-   *
-   * @param from - Currency to convert out of.
-   * @param to - Currency to convert into.
-   */
   earnRate(from: string, to: string): Promise<EarnRate> {
     return this.get<EarnRate>(`/earn/public-api/v1/rate/${encodeURIComponent(from)}/${encodeURIComponent(to)}`)
   }
@@ -991,13 +922,11 @@ export class WaltClient {
   }
 
   /**
-   * Prices an exchange without performing it. This is the rate a `createExchange()` would
-   * execute at, spread included, which the display rates on `coins()` and `accounts()` are not.
-   * An amount of `0` returns the rate and the limits alone.
+   * Executable rate, spread included, unlike the display rates.
    *
    * @param fromCurrency - What is paid.
    * @param toCurrency - What is received.
-   * @param fromAmount - How much of `fromCurrency` to price, within the quote's own `min_amount` and `max_amount`.
+   * @param fromAmount - Amount of `fromCurrency`; `0` returns the rate and limits only.
    */
   quote(fromCurrency: string, toCurrency: string, fromAmount: number): Promise<ExchangeQuote> {
     return this.request<ExchangeQuote>(
@@ -1008,11 +937,7 @@ export class WaltClient {
   }
 
   /**
-   * Performs an exchange. This moves real money and is not undone by anything in this client.
-   *
-   * It is the one request that is never retried: a timeout or a 502 after the server has
-   * committed the trade would otherwise execute it twice. Check `WaltRequestError.status`
-   * against the account's balances before trying again by hand.
+   * Moves real money and is never retried. After a failure, check balances before trying again.
    *
    * @param request - The exchange, in the shape the API takes it.
    */
@@ -1020,13 +945,7 @@ export class WaltClient {
     return this.request<Exchange>('/api/v1/exchange/create_exchange/', request, 0)
   }
 
-  /**
-   * Non-zero spot balances, with both totals so the difference between them is visible.
-   *
-   * `entries` is the spot wallet and `total` is the API's own figure, which also counts staked
-   * funds that have no `accounts()` row. The two are not meant to agree; `staked` is what sits
-   * between them. `earnCampaigns()` breaks that number down.
-   */
+  /** Non-zero spot balances against the API total, which also counts staked funds. */
   async portfolio(): Promise<Portfolio> {
     const data = await this.accounts()
     if (!Array.isArray(data.accounts)) {
