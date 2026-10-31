@@ -1,0 +1,32 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0] - 2026-10-31
+
+### Highlights
+
+- **Portfolio tracking:** read balances, prices, transaction history, profit and loss, and staked funds.
+- **Exchange:** quote and perform exchanges between assets.
+
+### Added
+
+- Added `WaltClient` with the `tokenProvider`, `baseUrl` and `fetch` options
+- Added `TelegramTokenSource` to sign in over Telegram and renew tokens automatically
+- Added the `storage` option to `TelegramTokenSource` to reuse tokens across restarts
+- Added `accounts()`, `portfolio()`, `pnl()` and `frozenBalances()` to read balances
+- Added `earnCampaigns()`, `earnCampaignTransactions()` and `earnRate()` to read staked funds
+- Added `coins()`, `coinDetails()`, `charts()`, `priceForFiatAtTime()` and `localCurrency()` to read prices
+- Added `availableExchanges()`, `quote()` and `createExchange()` to exchange between assets
+- Added `transactions()`, `accountTransactions()`, `transactionDetails()` and `unconfirmedTransactions()`
+- Added `allTransactions()` and `allAccountTransactions()` to read a whole transaction history
+- Added `detailsFor()` to look up details for many transactions at once
+- Added `normalizeTransaction()` to split a transaction into received, sent and fee legs
+- Added retries with backoff on 429, 502, 503 and 504, set by `retries` and `retryDelayMs`
+- Added the `maxConcurrent` option to limit how many requests run at once
+- Added `WaltRequestError` with the HTTP `status`, and `WaltAuthError` for rejected tokens
