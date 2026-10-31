@@ -47,6 +47,9 @@
       }
     }
   },
+  "bin": {
+    "telegram-login": "./build/bin/login.js"
+  },
   "files": [
     "build"
   ],
@@ -54,12 +57,12 @@
     "build": "tsdown",
     "check": "run-p check:**",
     "check:code": "oxlint ./source",
-    "check:format": "oxfmt --check ./source ./examples ./scripts",
+    "check:format": "oxfmt --check ./source ./examples",
     "check:types": "tsc --noEmit",
     "fix": "run-p fix:**",
     "fix:code": "oxlint --fix ./source",
-    "fix:format": "oxfmt ./source ./examples ./scripts",
-    "telegram:login": "node --env-file-if-exists=.env scripts/login.ts",
+    "fix:format": "oxfmt ./source ./examples",
+    "telegram:login": "node --env-file-if-exists=.env source/bin/login.ts",
     "example": "run-s build && node --env-file-if-exists=.env examples/portfolio.ts",
     "prepublishOnly": "run-s build",
     "preversion": "run-s check test build",

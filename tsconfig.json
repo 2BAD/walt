@@ -1,6 +1,6 @@
 {
   "extends": "@2bad/tsconfig",
-  "include": ["source/**/*", "examples/**/*", "scripts/**/*", "vitest.config.ts"],
+  "include": ["source/**/*", "examples/**/*", "vitest.config.ts"],
   "compilerOptions": {
     "target": "esnext",
     "outDir": "build",
