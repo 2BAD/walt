@@ -9,13 +9,13 @@
     "crypto",
     "portfolio"
   ],
-  "homepage": "https://github.com/2BAD/wallet#readme",
+  "homepage": "https://github.com/2BAD/walt#readme",
   "bugs": {
-    "url": "https://github.com/2BAD/wallet/issues"
+    "url": "https://github.com/2BAD/walt/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/2BAD/wallet.git"
+    "url": "git+https://github.com/2BAD/walt.git"
   },
   "license": "MIT",
   "author": "2BAD (https://github.com/2BAD)",

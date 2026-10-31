@@ -2,8 +2,8 @@
 
 [![NPM version](https://img.shields.io/npm/v/@2bad/walt)](https://www.npmjs.com/package/@2bad/walt)
 [![License](https://img.shields.io/npm/l/@2bad/walt)](https://www.npmjs.com/package/@2bad/walt)
-[![Code coverage](https://img.shields.io/codecov/c/github/2BAD/wallet)](https://codecov.io/gh/2BAD/wallet)
-[![GitHub Build Status](https://img.shields.io/github/actions/workflow/status/2BAD/wallet/build.yml)](https://github.com/2BAD/wallet/actions/workflows/build.yml)
+[![Code coverage](https://img.shields.io/codecov/c/github/2BAD/walt)](https://codecov.io/gh/2BAD/walt)
+[![GitHub Build Status](https://img.shields.io/github/actions/workflow/status/2BAD/walt/build.yml)](https://github.com/2BAD/walt/actions/workflows/build.yml)
 
 Client for Walt, the crypto app in Telegram formerly called Wallet.
 
