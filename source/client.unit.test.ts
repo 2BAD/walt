@@ -793,6 +793,28 @@ describe('waltClient detailsFor', () => {
 
     expect(rejections).toStrictEqual([])
   })
+
+  it('leaves no unhandled rejection when a later lookup fails while an earlier one is pending', async () => {
+    expect.assertions(2)
+
+    const rejections: unknown[] = []
+    const onRejection = (reason: unknown) => rejections.push(reason)
+    process.on('unhandledRejection', onRejection)
+
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      if (String(input).includes('10000000000001')) {
+        await new Promise((resolve) => setTimeout(resolve, 20))
+        return jsonResponse({ id: 1 })
+      }
+      return jsonResponse({}, 400)
+    })
+    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
+
+    await expect(Array.fromAsync(client.detailsFor(rows(3)))).rejects.toThrow('failed (400)')
+    process.off('unhandledRejection', onRejection)
+
+    expect(rejections).toStrictEqual([])
+  })
 })
 
 describe('normalizeTransaction', () => {

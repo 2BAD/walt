@@ -877,7 +877,9 @@ export class WaltClient {
     const inFlight: Promise<TransactionDetails>[] = []
     try {
       for await (const transaction of transactions) {
-        inFlight.push(this.transactionDetails(transaction.id, transaction.gateway))
+        const lookup = this.transactionDetails(transaction.id, transaction.gateway)
+        void Promise.allSettled([lookup])
+        inFlight.push(lookup)
         while (inFlight.length >= width) {
           const next = inFlight.shift()
           if (next) yield await next
