@@ -1,7 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises'
-import { type TokenState, TelegramTokenSource, WaltClient } from '@2bad/walt'
-
-const CACHE_FILE = '.walt-token.json'
+import { TelegramTokenSource, WaltClient } from '@2bad/walt'
 
 const session = process.env['TG_SESSION']
 const apiId = Number(process.env['TG_API_ID'])
@@ -11,18 +8,7 @@ if (!session || !apiId || !apiHash) {
   process.exit(1)
 }
 
-const storage = {
-  load: async (): Promise<TokenState | null> => {
-    try {
-      return JSON.parse(await readFile(CACHE_FILE, 'utf8')) as TokenState
-    } catch {
-      return null
-    }
-  },
-  save: (state: TokenState): Promise<void> => writeFile(CACHE_FILE, JSON.stringify(state), { mode: 0o600 })
-}
-
-const source = new TelegramTokenSource({ session, apiId, apiHash, storage })
+const source = new TelegramTokenSource({ session, apiId, apiHash })
 const client = new WaltClient({ tokenProvider: () => source.token() })
 
 const { entries, entriesTotal, total, staked, fiatCurrency } = await client.portfolio()

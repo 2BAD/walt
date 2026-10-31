@@ -38,7 +38,7 @@ const source = new TelegramTokenSource({
   maxFloodWaitMs: 60_000, // longest FLOOD_WAIT to wait out before throwing
 
   // optional, off by default
-  storage, // keeps the token across restarts
+  storage, // custom token store, false keeps the token in memory
   deviceSerial, // reuse a device id from an earlier session
   fetch // custom fetch implementation
 })
@@ -48,24 +48,26 @@ Call `source.disconnect()` before the process exits.
 
 ## Token storage
 
-With `storage`, a restart skips the Telegram sign-in.
+The token is cached in `~/.cache/walt/`, or `$XDG_CACHE_HOME/walt/` when that is set. A restart reuses it without signing in
+over Telegram again.
+
+The cache file holds live credentials. Only your user can read it.
+
+To keep the token somewhere else, such as a database, pass your own `load` and `save`.
 
 ```ts
-import { readFile, writeFile } from 'node:fs/promises'
-import { type TokenState, TelegramTokenSource } from '@2bad/walt'
-
 const source = new TelegramTokenSource({
   session,
   apiId,
   apiHash,
   storage: {
-    load: async () => JSON.parse(await readFile('.walt-token.json', 'utf8')) as TokenState,
-    save: (state) => writeFile('.walt-token.json', JSON.stringify(state), { mode: 0o600 })
+    load: () => db.get('walt-token'),
+    save: (state) => db.set('walt-token', state)
   }
 })
 ```
 
-Keep the file as private as `.env`.
+Pass `storage: false` to keep the token in memory only.
 
 ## `WaltClient`
 

@@ -1,5 +1,6 @@
 import { Api, errors, TelegramClient } from 'teleproto'
 import { StringSession } from 'teleproto/sessions/index.js'
+import { defaultTokenPath, fileTokenStorage } from '~/telegram/file-storage.ts'
 
 const BASE_URL = 'https://walletbot.me'
 const EXPIRY_SKEW_MS = 30_000
@@ -26,7 +27,8 @@ export type TelegramTokenSourceOptions = {
   deviceSerial?: string
   baseUrl?: string
   fetch?: typeof fetch
-  storage?: TokenStorage
+  /** Keeps the token between runs. Defaults to a file in the user's cache directory, `false` keeps it in memory. */
+  storage?: TokenStorage | false
   maxFloodWaitMs?: number
 }
 
@@ -64,7 +66,8 @@ export class TelegramTokenSource {
     this.deviceSerial = options.deviceSerial ?? `web:${crypto.randomUUID()}`
     this.baseUrl = options.baseUrl ?? BASE_URL
     this.fetchImpl = options.fetch ?? fetch
-    this.storage = options.storage
+    this.storage =
+      options.storage === false ? undefined : (options.storage ?? fileTokenStorage(defaultTokenPath(options.session)))
     this.maxFloodWaitMs = options.maxFloodWaitMs ?? MAX_FLOOD_WAIT_MS
   }
 

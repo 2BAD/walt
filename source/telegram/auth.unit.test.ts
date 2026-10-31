@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { errors } from 'teleproto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TokenState, TokenStorage } from '~/telegram/auth.ts'
@@ -46,7 +49,14 @@ const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
 const makeSource = (fetchImpl: typeof fetch, extra: Partial<{ storage: TokenStorage; deviceSerial: string }> = {}) =>
-  new TelegramTokenSource({ session: 'session-string', apiId: 1234, apiHash: 'hash', fetch: fetchImpl, ...extra })
+  new TelegramTokenSource({
+    session: 'session-string',
+    apiId: 1234,
+    apiHash: 'hash',
+    fetch: fetchImpl,
+    storage: false,
+    ...extra
+  })
 
 const memoryStorage = (initial: TokenState | null = null) => {
   let state = initial
@@ -240,6 +250,25 @@ describe('telegramTokenSource', () => {
     expect(await makeSource(fetchImpl, { storage }).token()).toBe('jwt-stored')
     expect(telegram.invoke).not.toHaveBeenCalled()
     expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('caches the token on disk by default and reuses it on the next start', async () => {
+    expect.assertions(3)
+
+    const cacheHome = await mkdtemp(join(tmpdir(), 'walt-'))
+    vi.stubEnv('XDG_CACHE_HOME', cacheHome)
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(authPayload()))
+    const start = () =>
+      new TelegramTokenSource({ session: 'session-string', apiId: 1234, apiHash: 'hash', fetch: fetchImpl }).token()
+
+    try {
+      expect(await start()).toBe('jwt-one')
+      expect(await start()).toBe('jwt-one')
+      expect(telegram.invoke).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.unstubAllEnvs()
+      await rm(cacheHome, { recursive: true, force: true })
+    }
   })
 
   it('refreshes an expired stored token using the persisted device serial', async () => {
