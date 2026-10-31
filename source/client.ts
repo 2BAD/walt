@@ -33,7 +33,7 @@ const decimal = (value: unknown): number | null => {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-export type WalletClientOptions = {
+export type WaltClientOptions = {
   tokenProvider: () => Promise<string>
   baseUrl?: string
   fetch?: typeof fetch
@@ -630,9 +630,9 @@ export type Exchange = {
   price_deviation_percent: string
 }
 
-export class WalletAuthError extends Error {}
+export class WaltAuthError extends Error {}
 
-export class WalletRequestError extends Error {
+export class WaltRequestError extends Error {
   /** HTTP status, or `0` when the request never got a response. */
   readonly status: number
   /** Parsed from `retry-after` when the server sent one as a whole number of seconds. */
@@ -660,7 +660,7 @@ const retryAfterOf = (response: Response): number | null => {
   return header !== null && /^\d+$/.test(header.trim()) ? Number(header.trim()) * 1000 : null
 }
 
-export class WalletClient {
+export class WaltClient {
   private readonly baseUrl: string
   private readonly fetchImpl: typeof fetch
   private readonly tokenProvider: () => Promise<string>
@@ -675,9 +675,9 @@ export class WalletClient {
   private active = 0
   private readonly waiting: (() => void)[] = []
 
-  constructor(options: WalletClientOptions) {
+  constructor(options: WaltClientOptions) {
     if (!options.tokenProvider) {
-      throw new WalletAuthError('tokenProvider is required')
+      throw new WaltAuthError('tokenProvider is required')
     }
     this.tokenProvider = options.tokenProvider
     this.baseUrl = options.baseUrl ?? BASE_URL
@@ -755,17 +755,17 @@ export class WalletClient {
         body: method === 'POST' ? JSON.stringify(body) : null
       })
     } catch (cause) {
-      throw new WalletRequestError(`${method} ${path} failed (no response)`, 0, null, { cause })
+      throw new WaltRequestError(`${method} ${path} failed (no response)`, 0, null, { cause })
     }
     if (response.status === 401) {
       if (allowRefresh) {
         this.token = null
         return this.send<T>(path, body, false)
       }
-      throw new WalletAuthError('token rejected after refresh')
+      throw new WaltAuthError('token rejected after refresh')
     }
     if (!response.ok) {
-      throw new WalletRequestError(
+      throw new WaltRequestError(
         `${method} ${path} failed (${response.status})`,
         response.status,
         retryAfterOf(response)
@@ -781,7 +781,7 @@ export class WalletClient {
         try {
           return await this.send<T>(path, body, true)
         } catch (error) {
-          const transient = error instanceof WalletRequestError && RETRYABLE_STATUS.has(error.status)
+          const transient = error instanceof WaltRequestError && RETRYABLE_STATUS.has(error.status)
           if (!transient || attempt >= retries) throw error
           const backoff = Math.min(MAX_RETRY_DELAY_MS, this.retryDelayMs * 2 ** attempt)
           await sleep(error.retryAfterMs ?? backoff / 2 + Math.random() * (backoff / 2))
@@ -1009,7 +1009,7 @@ export class WalletClient {
    * Performs an exchange. This moves real money and is not undone by anything in this client.
    *
    * It is the one request that is never retried: a timeout or a 502 after the server has
-   * committed the trade would otherwise execute it twice. Check `WalletRequestError.status`
+   * committed the trade would otherwise execute it twice. Check `WaltRequestError.status`
    * against the account's balances before trying again by hand.
    *
    * @param request - The exchange, in the shape the API takes it.

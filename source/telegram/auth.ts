@@ -60,7 +60,7 @@ export class TelegramTokenSource {
     this.client = new TelegramClient(new StringSession(options.session), options.apiId, options.apiHash, {
       connectionRetries: 3
     })
-    this.bot = options.bot ?? 'wallet'
+    this.bot = options.bot ?? 'walt'
     this.deviceSerial = options.deviceSerial ?? `web:${crypto.randomUUID()}`
     this.baseUrl = options.baseUrl ?? BASE_URL
     this.fetchImpl = options.fetch ?? fetch

@@ -1,5 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises'
-import { type TokenState, TelegramTokenSource, WalletClient } from '@2bad/wallet'
+import { type TokenState, TelegramTokenSource, WaltClient } from '@2bad/walt'
 
 const CACHE_FILE = '.wallet-token.json'
 
@@ -23,7 +23,7 @@ const storage = {
 }
 
 const source = new TelegramTokenSource({ session, apiId, apiHash, storage })
-const client = new WalletClient({ tokenProvider: () => source.token() })
+const client = new WaltClient({ tokenProvider: () => source.token() })
 
 const { entries, entriesTotal, total, staked, fiatCurrency } = await client.portfolio()
 for (const entry of entries) {

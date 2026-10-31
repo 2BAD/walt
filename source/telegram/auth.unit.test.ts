@@ -83,6 +83,15 @@ describe('telegramTokenSource', () => {
     expect(pathsOf(fetchImpl)).toStrictEqual(['/alectryon/public-api/auth'])
   })
 
+  it('opens the web view of the walt bot by default', async () => {
+    expect.assertions(1)
+
+    const { Api } = await import('teleproto')
+    await makeSource(vi.fn<typeof fetch>(async () => jsonResponse(authPayload()))).token()
+
+    expect(Api.messages.RequestWebView).toHaveBeenCalledWith(expect.objectContaining({ peer: 'walt', bot: 'walt' }))
+  })
+
   it('forwards the raw init data from the web view url', async () => {
     expect.assertions(1)
 

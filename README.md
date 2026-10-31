@@ -1,22 +1,23 @@
-# @2bad/wallet
+# @2bad/walt
 
-Client for the Telegram Wallet API. Fetches balances, coin rates and charts, transaction history, profit and
-loss, and a rolled-up portfolio, and can quote and perform exchanges between assets.
+Client for the Walt API. Walt is the crypto app in Telegram formerly called Wallet, and its bot answers to both
+`@walt` and the old `@wallet`. Fetches balances, coin rates and charts, transaction history, profit and loss,
+and a rolled-up portfolio, and can quote and perform exchanges between assets.
 
 ## Install
 
 ```bash
-pnpm add @2bad/wallet
+pnpm add @2bad/walt
 ```
 
 ## Usage
 
-`WalletClient` needs a `tokenProvider`. `TelegramTokenSource` is the one that ships with the package: it signs
-into the Wallet mini app over MTProto, so it needs a Telegram session string plus API credentials from
+`WaltClient` needs a `tokenProvider`. `TelegramTokenSource` is the one that ships with the package: it signs
+into the Walt mini app over MTProto, so it needs a Telegram session string plus API credentials from
 [my.telegram.org](https://my.telegram.org):
 
 ```ts
-import { TelegramTokenSource, WalletClient } from '@2bad/wallet'
+import { TelegramTokenSource, WaltClient } from '@2bad/walt'
 
 const source = new TelegramTokenSource({
   session: process.env.WALLET_TG_SESSION,
@@ -24,13 +25,13 @@ const source = new TelegramTokenSource({
   apiHash: process.env.TG_API_HASH
 })
 
-const client = new WalletClient({ tokenProvider: () => source.token() })
+const client = new WaltClient({ tokenProvider: () => source.token() })
 const { entries, total, fiatCurrency } = await client.portfolio()
 ```
 
 `TelegramTokenSource` renews the token 30s before it expires, preferring its refresh token and falling back to
-a full re-authentication. `WalletClient` caches whatever it is handed, drops it and retries once on a 401, and
-throws `WalletAuthError` if the second attempt is rejected too. Both collapse concurrent callers onto a single
+a full re-authentication. `WaltClient` caches whatever it is handed, drops it and retries once on a 401, and
+throws `WaltAuthError` if the second attempt is rejected too. Both collapse concurrent callers onto a single
 in-flight authentication, so fanning out requests with a cold cache costs one sign-in rather than one each.
 
 Without `storage` the token lives only in memory, so every process start re-authenticates over MTProto. Pass
@@ -63,7 +64,7 @@ static token has no way to renew itself, and the client will throw once it expir
 Sustained reading gets rate limited, so the client paces itself:
 
 ```ts
-new WalletClient({
+new WaltClient({
   tokenProvider,
   retries: 3,        // extra attempts on a transient failure, 0 disables
   retryDelayMs: 500, // base for the exponential backoff between them
@@ -76,9 +77,9 @@ jitter. A `retry-after` header is used instead of the backoff when the server se
 not retried**: this API answers a malformed cursor with one, so it means a bad request rather than a bad
 moment.
 
-A failed request throws `WalletRequestError`, which carries the `status` (`0` when there was no response) so
+A failed request throws `WaltRequestError`, which carries the `status` (`0` when there was no response) so
 callers can branch without matching on the message. A 401 is separate and unchanged: the token is dropped and
-the request replayed once, then `WalletAuthError` if it is rejected again.
+the request replayed once, then `WaltAuthError` if it is rejected again.
 
 `maxConcurrent` queues rather than rejects, so firing a batch is safe:
 
@@ -124,7 +125,7 @@ holding and as a total.
 
 `portfolio()` entries do not add up to its `total`, and that is the API's arithmetic rather than ours. Every
 row `accounts()` returns is the spot wallet, while the total also covers staked funds that have no row of
-their own. It is the figure the Wallet app itself displays. Rather than leave that to a footnote, the return
+their own. It is the figure the Walt app itself displays. Rather than leave that to a footnote, the return
 carries both numbers and their difference:
 
 ```ts
@@ -223,7 +224,7 @@ const { rate, min_amount, max_amount } = await client.quote('USDT', 'NVDAx', 0)
 `createExchange()` performs an exchange and moves real money. It executes immediately, with no confirm step,
 and the response carries both balances after the trade, the fee, and the `rate` it filled at. It is the one
 request the client never retries, because a timeout after the server has committed the trade would otherwise
-execute it twice. If it throws `WalletRequestError`, check the balances before trying again.
+execute it twice. If it throws `WaltRequestError`, check the balances before trying again.
 
 ```ts
 const filled = await client.createExchange({
@@ -328,14 +329,14 @@ describe.
 
 ### A note on the types
 
-The Wallet API is undocumented and publishes no response schemas, so every type here was derived from real
+The Walt API is undocumented and publishes no response schemas, so every type here was derived from real
 responses and checked field by field against a live account. They are accurate for what has been observed, and
 deliberately loose where it has not - nullable rather than narrow, `string` rather than a union that a future
 value would break. Treat them as a good map rather than a guarantee.
 
 ## Request headers
 
-Requests carry the same header set the Wallet web app sends: its `user-agent` and `sec-ch-ua` pair, the
+Requests carry the same header set the Walt web app sends: its `user-agent` and `sec-ch-ua` pair, the
 `sec-fetch-*` and `priority` hints, `dnt`/`sec-gpc`, a `referer` on the configured origin, and the Sentry
 tracing trio. `sentry-trace` and `traceparent` get fresh random span ids per request, with one trace id per
 client instance, the way a single browser session behaves.

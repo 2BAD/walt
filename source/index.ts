@@ -1,4 +1,4 @@
-export { normalizeTransaction, WalletAuthError, WalletClient, WalletRequestError } from '~/client.ts'
+export { normalizeTransaction, WaltAuthError, WaltClient, WaltRequestError } from '~/client.ts'
 export type {
   Account,
   AccountAction,
@@ -40,7 +40,7 @@ export type {
   TransactionGateway,
   TransactionLeg,
   TransactionsPage,
-  WalletClientOptions
+  WaltClientOptions
 } from '~/client.ts'
 export { TelegramTokenSource } from '~/telegram/auth.ts'
 export type { TelegramTokenSourceOptions, TokenState, TokenStorage } from '~/telegram/auth.ts'

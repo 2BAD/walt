@@ -10,7 +10,7 @@
     "allowImportingTsExtensions": true,
     "paths": {
       "~/*": ["./source/*"],
-      "@2bad/wallet": ["./source/index.ts"]
+      "@2bad/walt": ["./source/index.ts"]
     }
   }
 }

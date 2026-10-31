@@ -2,11 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   type Transaction,
   type TransactionDetails,
-  type WalletClientOptions,
+  type WaltClientOptions,
   normalizeTransaction,
-  WalletAuthError,
-  WalletClient,
-  WalletRequestError
+  WaltAuthError,
+  WaltClient,
+  WaltRequestError
 } from '~/client.ts'
 
 const detailsOf = (overrides: Partial<TransactionDetails>): TransactionDetails => ({
@@ -49,7 +49,7 @@ const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
 const makeClient = (fetchImpl: FetchMock, token = 'jwt.token.value') =>
-  new WalletClient({ tokenProvider: async () => token, fetch: fetchImpl })
+  new WaltClient({ tokenProvider: async () => token, fetch: fetchImpl })
 
 const headersOf = (fetchImpl: FetchMock, call = 0) => {
   const [, options] = fetchImpl.mock.calls[call] ?? []
@@ -58,11 +58,11 @@ const headersOf = (fetchImpl: FetchMock, call = 0) => {
 
 const authHeaderOf = (fetchImpl: FetchMock, call = 0) => headersOf(fetchImpl, call)['authorization']
 
-describe('walletClient', () => {
+describe('waltClient', () => {
   it('requires a tokenProvider', () => {
     expect.assertions(1)
 
-    expect(() => new WalletClient({} as unknown as { tokenProvider: () => Promise<string> })).toThrow(WalletAuthError)
+    expect(() => new WaltClient({} as unknown as { tokenProvider: () => Promise<string> })).toThrow(WaltAuthError)
   })
 
   it('sends the raw token in the Authorization header (no Bearer prefix)', async () => {
@@ -101,7 +101,7 @@ describe('walletClient', () => {
     expect.assertions(1)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
-    const client = new WalletClient({
+    const client = new WaltClient({
       tokenProvider: async () => 'jwt.token.value',
       baseUrl: 'https://staging.example',
       fetch: fetchImpl
@@ -133,7 +133,7 @@ describe('walletClient', () => {
 
     const tokenProvider = vi.fn<() => Promise<string>>(async () => 'jwt.token.value')
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
-    const client = new WalletClient({ tokenProvider, fetch: fetchImpl })
+    const client = new WaltClient({ tokenProvider, fetch: fetchImpl })
 
     await client.accounts()
     await client.accounts()
@@ -517,7 +517,7 @@ describe('walletClient', () => {
       return auth === 'fresh' ? jsonResponse({ accounts: [] }) : jsonResponse({ code: 'token_corrupted' }, 401)
     })
 
-    await new WalletClient({ tokenProvider, fetch: fetchImpl }).accounts()
+    await new WaltClient({ tokenProvider, fetch: fetchImpl }).accounts()
 
     expect(tokenProvider).toHaveBeenCalledTimes(2)
     expect(fetchImpl).toHaveBeenCalledTimes(2)
@@ -528,7 +528,7 @@ describe('walletClient', () => {
 
     const tokenProvider = vi.fn<() => Promise<string>>(async () => 'jwt.token.value')
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
-    const client = new WalletClient({ tokenProvider, fetch: fetchImpl })
+    const client = new WaltClient({ tokenProvider, fetch: fetchImpl })
 
     await Promise.all([client.accounts(), client.accounts(), client.accounts()])
 
@@ -541,16 +541,16 @@ describe('walletClient', () => {
 
     const tokenProvider = vi.fn<() => Promise<string>>(async () => 'always-stale')
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ code: 'token_corrupted' }, 401))
-    const client = new WalletClient({ tokenProvider, fetch: fetchImpl })
+    const client = new WaltClient({ tokenProvider, fetch: fetchImpl })
 
-    await expect(client.accounts()).rejects.toBeInstanceOf(WalletAuthError)
+    await expect(client.accounts()).rejects.toBeInstanceOf(WaltAuthError)
     expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 })
 
-describe('walletClient retries', () => {
-  const retryingClient = (fetchImpl: FetchMock, options: Partial<WalletClientOptions> = {}) =>
-    new WalletClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl, retryDelayMs: 0, ...options })
+describe('waltClient retries', () => {
+  const retryingClient = (fetchImpl: FetchMock, options: Partial<WaltClientOptions> = {}) =>
+    new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl, retryDelayMs: 0, ...options })
 
   it('retries a 503 until it succeeds', async () => {
     expect.assertions(2)
@@ -570,7 +570,7 @@ describe('walletClient retries', () => {
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}, 503))
 
-    await expect(retryingClient(fetchImpl, { retries: 2 }).accounts()).rejects.toBeInstanceOf(WalletRequestError)
+    await expect(retryingClient(fetchImpl, { retries: 2 }).accounts()).rejects.toBeInstanceOf(WaltRequestError)
     expect(fetchImpl).toHaveBeenCalledTimes(3)
   })
 
@@ -650,7 +650,7 @@ describe('walletClient retries', () => {
   })
 })
 
-describe('walletClient earn', () => {
+describe('waltClient earn', () => {
   it('requests the campaigns endpoint with its trailing slash', async () => {
     expect.assertions(2)
 
@@ -680,7 +680,7 @@ describe('walletClient earn', () => {
   })
 })
 
-describe('walletClient detailsFor', () => {
+describe('waltClient detailsFor', () => {
   const rows = (count: number) =>
     Array.from({ length: count }, (_, index) => ({ id: 10000000000001 + index }) as Transaction)
 
@@ -694,7 +694,7 @@ describe('walletClient detailsFor', () => {
   it('yields one detail per row, in the order the rows arrived', async () => {
     expect.assertions(1)
 
-    const client = new WalletClient({ tokenProvider: async () => 'jwt.token.value', fetch: detailFetch() })
+    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: detailFetch() })
     const seen = []
     for await (const detail of client.detailsFor(rows(9))) seen.push(detail.id)
 
@@ -708,7 +708,7 @@ describe('walletClient detailsFor', () => {
     expect.assertions(1)
 
     const fetchImpl = detailFetch()
-    const client = new WalletClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
+    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
     await Array.fromAsync(client.detailsFor([{ id: 10000000000001, gateway: 'xstocks_dividends' } as Transaction]))
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
@@ -730,7 +730,7 @@ describe('walletClient detailsFor', () => {
       return jsonResponse({ id: Number(id) })
     })
 
-    const client = new WalletClient({
+    const client = new WaltClient({
       tokenProvider: async () => 'jwt.token.value',
       fetch: fetchImpl,
       maxConcurrent: 4
@@ -754,7 +754,7 @@ describe('walletClient detailsFor', () => {
         : jsonResponse({ transactions: [], next_cursor: 'endless' })
     })
 
-    const client = new WalletClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
+    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
     const seen = await Array.fromAsync(client.detailsFor(client.allTransactions()))
 
     expect(seen.map((detail) => detail.id)).toStrictEqual([10000000000001])
@@ -767,7 +767,7 @@ describe('walletClient detailsFor', () => {
       String(input).includes('10000000000003') ? jsonResponse({}, 500) : jsonResponse({ id: 1 })
     )
 
-    const client = new WalletClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
+    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
 
     await expect(Array.fromAsync(client.detailsFor(rows(6)))).rejects.toThrow('failed (500)')
   })
@@ -782,7 +782,7 @@ describe('walletClient detailsFor', () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) =>
       String(input).includes('10000000000004') ? jsonResponse({}, 500) : jsonResponse({ id: 1 })
     )
-    const client = new WalletClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
+    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
 
     for await (const detail of client.detailsFor(rows(8))) {
       expect(detail.id).toBe(1)
@@ -902,7 +902,7 @@ describe('normalizeTransaction', () => {
   })
 })
 
-describe('walletClient exchange', () => {
+describe('waltClient exchange', () => {
   const quoteResponse = {
     from_amount: 1,
     from_currency: 'USDT',
@@ -978,7 +978,7 @@ describe('walletClient exchange', () => {
 
     const responses = [jsonResponse({}, 503), jsonResponse(quoteResponse)]
     const fetchImpl = vi.fn<typeof fetch>(async () => responses.shift() ?? jsonResponse({}, 500))
-    const client = new WalletClient({ tokenProvider: async () => 'jwt', fetch: fetchImpl, retryDelayMs: 0 })
+    const client = new WaltClient({ tokenProvider: async () => 'jwt', fetch: fetchImpl, retryDelayMs: 0 })
 
     await expect(client.quote('USDT', 'XLEx', 0)).resolves.toStrictEqual(quoteResponse)
     expect(fetchImpl).toHaveBeenCalledTimes(2)
@@ -988,10 +988,10 @@ describe('walletClient exchange', () => {
     expect.assertions(2)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}, 503))
-    const client = new WalletClient({ tokenProvider: async () => 'jwt', fetch: fetchImpl, retries: 3, retryDelayMs: 0 })
+    const client = new WaltClient({ tokenProvider: async () => 'jwt', fetch: fetchImpl, retries: 3, retryDelayMs: 0 })
     const request = { from_currency: 'USDT', to_currency: 'XLEx', from_amount: 1, local_currency: 'USD' as const }
 
-    await expect(client.createExchange(request)).rejects.toBeInstanceOf(WalletRequestError)
+    await expect(client.createExchange(request)).rejects.toBeInstanceOf(WaltRequestError)
     expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 
@@ -1005,7 +1005,7 @@ describe('walletClient exchange', () => {
       return auth === 'fresh' ? jsonResponse(quoteResponse) : jsonResponse({ code: 'token_corrupted' }, 401)
     })
 
-    await new WalletClient({ tokenProvider, fetch: fetchImpl }).quote('USDT', 'XLEx', 1)
+    await new WaltClient({ tokenProvider, fetch: fetchImpl }).quote('USDT', 'XLEx', 1)
     const bodies = fetchImpl.mock.calls.map(([, options]) => String(options?.body))
 
     expect(fetchImpl).toHaveBeenCalledTimes(2)
