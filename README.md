@@ -96,7 +96,7 @@ derives anything; the rest hand back what the API returned, with response fields
 
 ```ts
 accounts(): Promise<AccountsResponse>
-portfolio(): Promise<{ entries: PortfolioEntry[]; total: number; fiatCurrency: string }>
+portfolio(): Promise<Portfolio>
 pnl(): Promise<PnlResponse>
 frozenBalances<T = unknown>(): Promise<T[]>
 ```
@@ -156,9 +156,8 @@ const { campaigns } = await client.earnCampaigns()
 const staked = campaigns.filter((campaign) => campaign.account !== null)
 ```
 
-Priced up, those balances account for the difference. On the account these types came from, spot rows summed
-to 6504.39 against a stated total of 7894.74, and the four joined campaigns came to 1389.87 of the 1390.35
-gap, the remainder being rate drift between the two calls.
+Priced up, those balances account for the difference between the spot rows and the stated total, apart from
+rate drift between the two calls.
 
 Not every staking asset is quoted by `coins()` - `USDe` is not - which is what `earnRate()` is for. It also
 reports how far a stablecoin has drifted from its peg, in `depeg_info`.
@@ -246,6 +245,7 @@ accountTransactions(currency: string, limit?: number, cursor?: string): Promise<
 allTransactions(limit?: number): AsyncGenerator<Transaction>
 allAccountTransactions(currency: string, limit?: number): AsyncGenerator<Transaction>
 transactionDetails(id: number | string, gateway?: TransactionGateway): Promise<TransactionDetails>
+detailsFor(transactions: AsyncIterable<Transaction> | Iterable<Transaction>): AsyncGenerator<TransactionDetails>
 unconfirmedTransactions<T = unknown>(limit?: number): Promise<{ transactions: T[]; size: number }>
 ```
 
@@ -307,7 +307,7 @@ The raw record is easy to read backwards, so this turns one into directional leg
 const details = await client.transactionDetails(10000000000001, 'crypto_exchange')
 const { received, sent, fee } = normalizeTransaction(details)
 // received { currency: 'USDT', amount: '1000.000000' }
-// sent     { currency: 'BTC',  amount: '0.013728980000' }
+// sent     { currency: 'BTC',  amount: '0.010000000000' }
 ```
 
 Three things it takes care of. `type` is relative to the wallet, so the deposit above is a *sale* of BTC, not a
@@ -358,7 +358,7 @@ from `.env`.
 pnpm build            # compile to ESM + generate .d.ts
 pnpm test             # run all tests
 pnpm test:unit        # unit tests with coverage
-pnpm check            # lint + format check
+pnpm check            # lint, format and type check
 pnpm fix              # auto-fix lint + formatting
 pnpm telegram:login   # interactive Telegram sign-in, prints a session string
 pnpm example          # print a portfolio using a Telegram session

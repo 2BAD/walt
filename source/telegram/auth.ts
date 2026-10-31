@@ -38,10 +38,7 @@ type AuthResponse = {
   access_token_expires_in: number
 }
 
-const sleep = (ms: number) =>
-  new Promise((resolve) => {
-    setTimeout(resolve, ms)
-  })
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 export class TelegramTokenSource {
   private readonly client: TelegramClient

@@ -399,8 +399,8 @@ export const normalizeTransaction = (details: TransactionDetails): NormalizedTra
     received: inbound ? main : pair,
     sent: inbound ? pair : main,
     fee:
-      details.fee_currency !== null && Number(details.fee_amount) > 0
-        ? { currency: details.fee_currency, amount: details.fee_amount ?? '0' }
+      details.fee_currency !== null && details.fee_amount !== null && Number(details.fee_amount) > 0
+        ? { currency: details.fee_currency, amount: details.fee_amount }
         : null
   }
 }

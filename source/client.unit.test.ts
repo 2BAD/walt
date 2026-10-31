@@ -457,13 +457,13 @@ describe('walletClient', () => {
   it('sends all four required parameters for a historical price lookup', async () => {
     expect.assertions(2)
 
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ rate: '1.656928134127' }))
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ rate: '1.500000000000' }))
     const price = await makeClient(fetchImpl).priceForFiatAtTime('TON', 'USD', 1, '2026-01-01T00:00:00Z')
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
       'https://walletbot.me/api/v1/exchange_rates/price_for_fiat_at_time/?crypto_currency=TON&local_currency=USD&amount=1&time=2026-01-01T00%3A00%3A00Z'
     )
-    expect(price.rate).toBe('1.656928134127')
+    expect(price.rate).toBe('1.500000000000')
   })
 
   it('serialises a Date for a historical price lookup', async () => {
@@ -804,13 +804,13 @@ describe('normalizeTransaction', () => {
         type: 'deposit',
         crypto_amount: '1000.000000',
         crypto_currency: 'USDT',
-        pair_transaction_amount: '0.013728980000',
+        pair_transaction_amount: '0.010000000000',
         pair_transaction_currency: 'BTC'
       })
     )
 
     expect(legs.received).toStrictEqual({ currency: 'USDT', amount: '1000.000000' })
-    expect(legs.sent).toStrictEqual({ currency: 'BTC', amount: '0.013728980000' })
+    expect(legs.sent).toStrictEqual({ currency: 'BTC', amount: '0.010000000000' })
   })
 
   it('reads a deposit of the asset as a purchase paid for in the quote currency', () => {
@@ -819,14 +819,14 @@ describe('normalizeTransaction', () => {
     const legs = normalizeTransaction(
       detailsOf({
         type: 'deposit',
-        crypto_amount: '10.288663',
+        crypto_amount: '2.000000',
         crypto_currency: 'GMEx',
         pair_transaction_amount: '200.000000',
         pair_transaction_currency: 'USDT'
       })
     )
 
-    expect(legs.received).toStrictEqual({ currency: 'GMEx', amount: '10.288663' })
+    expect(legs.received).toStrictEqual({ currency: 'GMEx', amount: '2.000000' })
     expect(legs.sent).toStrictEqual({ currency: 'USDT', amount: '200.000000' })
   })
 
@@ -854,14 +854,14 @@ describe('normalizeTransaction', () => {
       detailsOf({
         type: 'deposit',
         gateway: 'p2p_order',
-        crypto_amount: '100.502512',
+        crypto_amount: '100.000000',
         crypto_currency: 'USDT',
-        pair_transaction_amount: '101.407035',
+        pair_transaction_amount: '101.000000',
         pair_transaction_currency: 'USDT'
       })
     )
 
-    expect(legs.received).toStrictEqual({ currency: 'USDT', amount: '100.502512' })
+    expect(legs.received).toStrictEqual({ currency: 'USDT', amount: '100.000000' })
     expect(legs.sent).toBeNull()
   })
 
@@ -881,17 +881,17 @@ describe('normalizeTransaction', () => {
 
     const legs = normalizeTransaction(
       detailsOf({
-        crypto_amount: '0.334251',
+        crypto_amount: '0.500000',
         crypto_currency: 'AAPLx',
         pair_transaction_amount: '100.000000',
         pair_transaction_currency: 'USDT',
-        fee_amount: '0.003036',
+        fee_amount: '0.005000',
         fee_currency: 'AAPLx'
       })
     )
 
-    expect(legs.fee).toStrictEqual({ currency: 'AAPLx', amount: '0.003036' })
-    expect(legs.received).toStrictEqual({ currency: 'AAPLx', amount: '0.334251' })
+    expect(legs.fee).toStrictEqual({ currency: 'AAPLx', amount: '0.005000' })
+    expect(legs.received).toStrictEqual({ currency: 'AAPLx', amount: '0.500000' })
   })
 
   it('treats a zero or absent fee as no fee', () => {
