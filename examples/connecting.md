@@ -4,7 +4,7 @@
 import { TelegramTokenSource, WaltClient } from '@2bad/walt'
 
 const source = new TelegramTokenSource({
-  session: process.env.WALLET_TG_SESSION ?? '',
+  session: process.env.TG_SESSION ?? '',
   apiId: Number(process.env.TG_API_ID),
   apiHash: process.env.TG_API_HASH ?? ''
 })
@@ -16,7 +16,11 @@ const client = new WaltClient({ tokenProvider: () => source.token() })
 
 Get `apiId` and `apiHash` from [my.telegram.org](https://my.telegram.org).
 
-Run `pnpm telegram:login` in a clone of this repository to sign in once and print a session string.
+Sign in once to get a session string.
+
+```sh
+npx -p @2bad/walt telegram-login
+```
 
 The session string grants full access to the account. Keep it out of version control.
 
@@ -40,13 +44,11 @@ const source = new TelegramTokenSource({
 })
 ```
 
-Tokens are renewed before they expire.
-
 Call `source.disconnect()` before the process exits.
 
 ## Token storage
 
-Without `storage`, every process start signs in over Telegram again.
+With `storage`, a restart skips the Telegram sign-in.
 
 ```ts
 import { readFile, writeFile } from 'node:fs/promises'
@@ -63,7 +65,7 @@ const source = new TelegramTokenSource({
 })
 ```
 
-The stored state holds live credentials. Treat the file like `.env`.
+Keep the file as private as `.env`.
 
 ## `WaltClient`
 
@@ -82,9 +84,9 @@ const client = new WaltClient({
 })
 ```
 
-Sustained reading gets rate limited. Lower `maxConcurrent` if you see 429 errors.
+Lower `maxConcurrent` if you see 429 errors.
 
-Extra requests wait in a queue. Firing a large batch is safe.
+Firing a large batch at once is safe.
 
 ```ts
 const details = await Promise.all(ids.map((id) => client.transactionDetails(id)))
@@ -94,8 +96,8 @@ const details = await Promise.all(ids.map((id) => client.transactionDetails(id))
 
 Any `() => Promise<string>` works as `tokenProvider`.
 
-A static token cannot renew itself. The client throws `WaltAuthError` once it expires.
-
 ```ts
 const client = new WaltClient({ tokenProvider: async () => 'JWT' })
 ```
+
+A static token throws `WaltAuthError` once it expires.
