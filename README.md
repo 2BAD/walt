@@ -376,7 +376,7 @@ build/      # compiled output (generated)
 ## Requirements
 
 - Node.js >= 26
-- pnpm >= 11
+- pnpm >= 12
 
 ## License
 
