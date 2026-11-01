@@ -48,7 +48,7 @@ A runnable script is in [examples/portfolio.ts](examples/portfolio.ts).
 new TelegramTokenSource(options: TelegramTokenSourceOptions)
 
 type TelegramTokenSource = {
-  token(): Promise<string>
+  token(rejected?: string): Promise<string>
   disconnect(): Promise<void>
 }
 
@@ -61,7 +61,8 @@ type WaltClient = {
   frozenBalances<T = unknown>(): Promise<T[]>
 
   earnCampaigns(): Promise<EarnCampaignsResponse>
-  earnCampaignTransactions(campaignId: number | string): Promise<EarnTransactionsPage>
+  earnCampaignTransactions(campaignId: number | string, limit?: number, after?: EarnTransactionsPage): Promise<EarnTransactionsPage>
+  allEarnCampaignTransactions(campaignId: number | string, limit?: number): AsyncGenerator<EarnTransaction>
   earnRate(from: string, to: string): Promise<EarnRate>
 
   coins(fiatCurrency: FiatCurrency): Promise<Coin[]>

@@ -621,11 +621,22 @@ export class WaltRequestError extends Error {
   readonly status: number
   /** From a `retry-after` given in seconds. */
   readonly retryAfterMs: number | null
+  /** The response body, parsed when it is JSON, such as `{ code: 'market_order_max_limit_error', detail }`. */
+  readonly body: unknown
 
-  constructor(message: string, status: number, retryAfterMs: number | null, options?: ErrorOptions) {
+  constructor(message: string, status: number, retryAfterMs: number | null, body: unknown, options?: ErrorOptions) {
     super(message, options)
     this.status = status
     this.retryAfterMs = retryAfterMs
+    this.body = body
+  }
+}
+
+const parseBody = (text: string): unknown => {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
   }
 }
 
@@ -664,6 +675,12 @@ export class WaltClient {
     this.retries = options.retries ?? 3
     this.retryDelayMs = options.retryDelayMs ?? 500
     this.maxConcurrent = options.maxConcurrent ?? 4
+    if (!(this.maxConcurrent >= 1)) {
+      throw new RangeError(`maxConcurrent must be at least 1, got ${this.maxConcurrent}`)
+    }
+    if (!Number.isInteger(this.retries) || this.retries < 0) {
+      throw new RangeError(`retries must be a whole number of at least 0, got ${this.retries}`)
+    }
     this.baggage = [
       'sentry-environment=production',
       `sentry-release=${SENTRY_RELEASE}`,
@@ -735,21 +752,38 @@ export class WaltClient {
         body: method === 'POST' ? JSON.stringify(body) : null
       })
     } catch (cause) {
-      throw new WaltRequestError(`${method} ${path} failed (no response)`, 0, null, { cause })
+      throw new WaltRequestError(`${method} ${path} failed (no response)`, 0, null, null, { cause })
     }
     if (response.status === 401) {
       if (rejected !== undefined) throw new WaltAuthError('token rejected after refresh')
       if (this.token === token) this.token = null
       return this.send<T>(path, body, token)
     }
+    let text: string
+    try {
+      text = await response.text()
+    } catch (cause) {
+      throw new WaltRequestError(`${method} ${path} failed (body not received)`, 0, null, null, { cause })
+    }
     if (!response.ok) {
       throw new WaltRequestError(
         `${method} ${path} failed (${response.status})`,
         response.status,
-        retryAfterOf(response)
+        retryAfterOf(response),
+        parseBody(text)
       )
     }
-    return (await response.json()) as T
+    try {
+      return JSON.parse(text) as T
+    } catch (cause) {
+      throw new WaltRequestError(
+        `${method} ${path} returned a body that is not JSON (${response.status})`,
+        response.status,
+        null,
+        text,
+        { cause }
+      )
+    }
   }
 
   private async request<T>(path: string, body: unknown, retries: number): Promise<T> {
@@ -805,12 +839,15 @@ export class WaltClient {
 
   private async *walk(page: (cursor?: string) => Promise<TransactionsPage>): AsyncGenerator<Transaction> {
     let cursor: string | undefined
+    const seen = new Set<string>()
     for (;;) {
       const current = await page(cursor)
       // past the last row the API still returns a next_cursor, with an empty page
       if (current.transactions.length === 0) return
       yield* current.transactions
       if (current.next_cursor === null) return
+      if (seen.has(current.next_cursor)) throw new Error('transactions pagination returned a cursor twice')
+      seen.add(current.next_cursor)
       cursor = current.next_cursor
     }
   }
@@ -878,14 +915,53 @@ export class WaltClient {
   }
 
   /**
-   * Deposits, withdrawals and payouts within one campaign. First page only.
+   * Deposits, withdrawals and payouts within one campaign, newest first.
    *
    * @param campaignId - `campaign_id` from `earnCampaigns()`.
+   * @param limit - Rows per page. The API defaults to 10.
+   * @param after - The previous page, to fetch the one that follows it.
    */
-  earnCampaignTransactions(campaignId: number | string): Promise<EarnTransactionsPage> {
+  earnCampaignTransactions(
+    campaignId: number | string,
+    limit?: number,
+    after?: EarnTransactionsPage
+  ): Promise<EarnTransactionsPage> {
+    const query = new URLSearchParams()
+    if (limit !== undefined) query.set('limit', String(limit))
+    query.set('merge_with_transfer_requests', 'true')
+    if (after?.deposit_acc_next_from != null) query.set('deposit_acc_offset_id', String(after.deposit_acc_next_from))
+    if (after?.payout_acc_next_from != null) query.set('payout_acc_offset_id', String(after.payout_acc_next_from))
+    if (after?.transfer_request_next_before_datetime != null) {
+      query.set('transfer_request_before_datetime', after.transfer_request_next_before_datetime)
+    }
     return this.get<EarnTransactionsPage>(
-      `/earn/public-api/v1/campaigns/${encodeURIComponent(String(campaignId))}/transactions`
+      `/earn/public-api/v1/campaigns/${encodeURIComponent(String(campaignId))}/transactions?${query.toString()}`
     )
+  }
+
+  /**
+   * Every row of `earnCampaignTransactions()`, page by page. The cursors stay set past the last row,
+   * so a page shorter than `limit` ends the walk.
+   *
+   * @param campaignId - `campaign_id` from `earnCampaigns()`.
+   * @param limit - Rows per page.
+   * @yields One row per deposit, withdrawal or payout.
+   */
+  async *allEarnCampaignTransactions(campaignId: number | string, limit = 100): AsyncGenerator<EarnTransaction> {
+    const seen = new Set<string>()
+    let page: EarnTransactionsPage | undefined
+    for (;;) {
+      page = await this.earnCampaignTransactions(campaignId, limit, page)
+      yield* page.transactions
+      if (page.transactions.length < limit) return
+      const cursor = [
+        page.deposit_acc_next_from,
+        page.payout_acc_next_from,
+        page.transfer_request_next_before_datetime
+      ].join('|')
+      if (seen.has(cursor)) throw new Error('earn transactions pagination returned a cursor twice')
+      seen.add(cursor)
+    }
   }
 
   earnRate(from: string, to: string): Promise<EarnRate> {

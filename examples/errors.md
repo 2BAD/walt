@@ -15,9 +15,11 @@ try {
 
 `status` is `0` when there was no response.
 
-## `WaltAuthError`
+`body` holds the response body, parsed when it is JSON.
 
-Thrown when the API rejects a freshly fetched token.
+```ts
+if (error instanceof WaltRequestError) console.log(error.body) // { code: 'market_order_max_limit_error', detail: '...' }
+```
 
 ## Retries
 
@@ -26,7 +28,3 @@ Thrown when the API rejects a freshly fetched token.
 A 500 is not retried. It means a bad request, such as a malformed cursor.
 
 `createExchange()` is never retried.
-
-## Flood wait
-
-A Telegram `FLOOD_WAIT` longer than `maxFloodWaitMs` throws.

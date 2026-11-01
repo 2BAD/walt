@@ -202,8 +202,7 @@ export class TelegramTokenSource {
       body: JSON.stringify(body)
     })
     if (!response.ok) {
-      const detail = (await response.text()).slice(0, 120)
-      throw new AuthEndpointError(`${path} failed (${response.status}): ${detail}`, response.status)
+      throw new AuthEndpointError(`${path} failed (${response.status}): ${await response.text()}`, response.status)
     }
     return (await response.json()) as AuthResponse
   }

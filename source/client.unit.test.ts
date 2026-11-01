@@ -356,6 +356,17 @@ describe('waltClient', () => {
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/transactions/?limit=50')
   })
 
+  it('throws instead of looping when the api repeats a cursor', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ transactions: [{ id: 10000000000001 }], next_cursor: 'stuck' })
+    )
+
+    await expect(Array.fromAsync(makeClient(fetchImpl).allTransactions())).rejects.toThrow('cursor twice')
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
   it('threads the currency and cursor through an account walk', async () => {
     expect.assertions(2)
 
@@ -513,6 +524,58 @@ describe('waltClient', () => {
     expect(fetchImpl.mock.calls[1]?.[0]).toBe(
       'https://walletbot.me/api/v1/transactions/single-account/?crypto_currency=TON&limit=2&cursor=cur%2Fsor'
     )
+  })
+
+  it('keeps a json error body on the error', async () => {
+    expect.assertions(2)
+
+    const body = { code: 'market_order_max_limit_error', detail: 'too much' }
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(body, 400))
+    const request = makeClient(fetchImpl).quote('USDT', 'BTC', 1)
+
+    await expect(request).rejects.toBeInstanceOf(WaltRequestError)
+    await expect(request).rejects.toMatchObject({ status: 400, body })
+  })
+
+  it('keeps a non-json error body as text', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response('<html>forbidden</html>', { status: 403 }))
+
+    await expect(makeClient(fetchImpl).accounts()).rejects.toMatchObject({
+      status: 403,
+      body: '<html>forbidden</html>'
+    })
+  })
+
+  it('turns a successful response that is not json into a request error', async () => {
+    expect.assertions(3)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response('<html>challenge</html>', { status: 200 }))
+    const request = makeClient(fetchImpl).accounts()
+
+    await expect(request).rejects.toBeInstanceOf(WaltRequestError)
+    await expect(request).rejects.toMatchObject({ status: 200, body: '<html>challenge</html>' })
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    [{ maxConcurrent: 0 }, 'maxConcurrent'],
+    [{ maxConcurrent: Number.NaN }, 'maxConcurrent'],
+    [{ retries: -1 }, 'retries'],
+    [{ retries: 1.5 }, 'retries']
+  ])('rejects %o', (options, name) => {
+    expect.assertions(1)
+
+    expect(() => new WaltClient({ tokenProvider: async () => 'jwt', ...options })).toThrow(
+      new RegExp(`^${name} must be`)
+    )
+  })
+
+  it('accepts an unlimited maxConcurrent', () => {
+    expect.assertions(1)
+
+    expect(() => new WaltClient({ tokenProvider: async () => 'jwt', maxConcurrent: Infinity })).not.toThrow()
   })
 
   it('throws on a non-401 error status', async () => {
@@ -715,7 +778,69 @@ describe('waltClient earn', () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [] }))
     await makeClient(fetchImpl).earnCampaignTransactions(11)
 
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/earn/public-api/v1/campaigns/11/transactions')
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/earn/public-api/v1/campaigns/11/transactions?merge_with_transfer_requests=true'
+    )
+  })
+
+  it('asks for the page after a given one with its set cursors', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [] }))
+    await makeClient(fetchImpl).earnCampaignTransactions(11, 50, {
+      transactions: [],
+      deposit_acc_next_from: 10000000000001,
+      payout_acc_next_from: null,
+      transfer_request_next_before_datetime: '2026-01-01T00:00:00Z'
+    })
+    const query = new URL(String(fetchImpl.mock.calls[0]?.[0])).searchParams
+
+    expect(Object.fromEntries(query)).toStrictEqual({
+      limit: '50',
+      merge_with_transfer_requests: 'true',
+      deposit_acc_offset_id: '10000000000001',
+      transfer_request_before_datetime: '2026-01-01T00:00:00Z'
+    })
+  })
+
+  it('walks campaign transactions until a short page, although the cursor stays set', async () => {
+    expect.assertions(3)
+
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const offset = new URL(String(input)).searchParams.get('deposit_acc_offset_id')
+      const ids = offset === null ? [10000000000003, 10000000000002] : [10000000000001]
+      return jsonResponse({
+        transactions: ids.map((id) => ({ id })),
+        deposit_acc_next_from: Math.min(...ids),
+        payout_acc_next_from: null,
+        transfer_request_next_before_datetime: null
+      })
+    })
+
+    const rows = await Array.fromAsync(makeClient(fetchImpl).allEarnCampaignTransactions(11, 2))
+
+    expect(rows.map((row) => row.id)).toStrictEqual([10000000000003, 10000000000002, 10000000000001])
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(new URL(String(fetchImpl.mock.calls[1]?.[0])).searchParams.get('deposit_acc_offset_id')).toBe(
+      '10000000000002'
+    )
+  })
+
+  it('throws instead of looping when campaign cursors repeat', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({
+        transactions: [{ id: 10000000000001 }],
+        deposit_acc_next_from: 10000000000001,
+        payout_acc_next_from: null,
+        transfer_request_next_before_datetime: null
+      })
+    )
+
+    await expect(Array.fromAsync(makeClient(fetchImpl).allEarnCampaignTransactions(11, 1))).rejects.toThrow(
+      'cursor twice'
+    )
   })
 
   it('encodes both sides of a rate lookup', async () => {
