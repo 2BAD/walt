@@ -169,6 +169,69 @@ describe('telegramTokenSource', () => {
     ])
   })
 
+  it('renews a fresh token that the api rejected', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(authPayload()))
+    const source = makeSource(fetchImpl)
+    const rejected = await source.token()
+
+    fetchImpl.mockResolvedValueOnce(jsonResponse(authPayload({ jwt: 'jwt-two' })))
+
+    expect(await source.token(rejected)).toBe('jwt-two')
+    expect(pathsOf(fetchImpl)).toStrictEqual(['/alectryon/public-api/auth', '/alectryon/public-api/auth-refresh'])
+  })
+
+  it('keeps the cached token when a different one was rejected', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(authPayload()))
+    const source = makeSource(fetchImpl)
+    await source.token()
+
+    expect(await source.token('jwt-older')).toBe('jwt-one')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['a 5xx', () => new Response('down', { status: 503 })],
+    ['a 429', () => new Response('slow down', { status: 429 })]
+  ])('keeps the refresh token and skips telegram when the refresh fails with %s', async (_label, failure) => {
+    expect.assertions(3)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(authPayload()))
+    const source = makeSource(fetchImpl)
+    await source.token()
+
+    fetchImpl.mockResolvedValueOnce(failure())
+    vi.advanceTimersByTime(300_000)
+
+    await expect(source.token()).rejects.toThrow('/alectryon/public-api/auth-refresh failed')
+
+    fetchImpl.mockResolvedValueOnce(jsonResponse(authPayload({ jwt: 'jwt-two' })))
+
+    expect(await source.token()).toBe('jwt-two')
+    expect(pathsOf(fetchImpl)).toStrictEqual([
+      '/alectryon/public-api/auth',
+      '/alectryon/public-api/auth-refresh',
+      '/alectryon/public-api/auth-refresh'
+    ])
+  })
+
+  it('keeps the refresh token when the refresh never gets a response', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(authPayload()))
+    const source = makeSource(fetchImpl)
+    await source.token()
+
+    fetchImpl.mockRejectedValueOnce(new TypeError('fetch failed'))
+    vi.advanceTimersByTime(300_000)
+
+    await expect(source.token()).rejects.toThrow('fetch failed')
+    expect(telegram.invoke).toHaveBeenCalledTimes(1)
+  })
+
   it('surfaces a failed authentication response', async () => {
     expect.assertions(1)
 
@@ -177,11 +240,41 @@ describe('telegramTokenSource', () => {
     await expect(makeSource(fetchImpl).token()).rejects.toThrow('/alectryon/public-api/auth failed (403): nope')
   })
 
-  it('derives expiry from expires_in when the timestamp is unparseable', async () => {
+  it('derives expiry from expires_in rather than the server clock', async () => {
     expect.assertions(2)
 
     const fetchImpl = vi.fn<typeof fetch>(async () =>
-      jsonResponse(authPayload({ access_token_expires_at: 'not-a-date', access_token_expires_in: 600 }))
+      jsonResponse(
+        authPayload({
+          access_token_expires_at: new Date(Date.now() + 60_000).toISOString(),
+          access_token_expires_in: 600
+        })
+      )
+    )
+    const source = makeSource(fetchImpl)
+    await source.token()
+
+    vi.advanceTimersByTime(300_000)
+    await source.token()
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+
+    vi.advanceTimersByTime(300_000)
+    await source.token()
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('falls back to the expiry timestamp when expires_in is missing', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse(
+        authPayload({
+          access_token_expires_at: new Date(Date.now() + 600_000).toISOString(),
+          access_token_expires_in: undefined
+        })
+      )
     )
     const source = makeSource(fetchImpl)
     await source.token()

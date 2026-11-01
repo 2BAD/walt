@@ -523,6 +523,38 @@ describe('waltClient', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 
+  it('hands the rejected token back to the provider on 401', async () => {
+    expect.assertions(1)
+
+    const tokens = ['Bearer stale', 'fresh']
+    const tokenProvider = vi.fn<(rejected?: string) => Promise<string>>(async () => tokens.shift() ?? 'fresh')
+    const fetchImpl = vi.fn<typeof fetch>(async (_url, options) => {
+      const auth = (options?.headers as Record<string, string> | undefined)?.['authorization']
+      return auth === 'fresh' ? jsonResponse({ accounts: [] }) : jsonResponse({ code: 'token_corrupted' }, 401)
+    })
+
+    await new WaltClient({ tokenProvider, fetch: fetchImpl }).accounts()
+
+    expect(tokenProvider.mock.calls).toStrictEqual([[undefined], ['Bearer stale']])
+  })
+
+  it('asks the provider once when concurrent requests hit a 401 together', async () => {
+    expect.assertions(2)
+
+    const tokens = ['stale', 'fresh']
+    const tokenProvider = vi.fn<(rejected?: string) => Promise<string>>(async () => tokens.shift() ?? 'fresh')
+    const fetchImpl = vi.fn<typeof fetch>(async (_url, options) => {
+      const auth = (options?.headers as Record<string, string> | undefined)?.['authorization']
+      return auth === 'fresh' ? jsonResponse({ accounts: [] }) : jsonResponse({ code: 'token_corrupted' }, 401)
+    })
+    const client = new WaltClient({ tokenProvider, fetch: fetchImpl })
+
+    await Promise.all([client.accounts(), client.accounts(), client.accounts()])
+
+    expect(tokenProvider).toHaveBeenCalledTimes(2)
+    expect(fetchImpl).toHaveBeenCalledTimes(6)
+  })
+
   it('asks the provider once for concurrent requests with no cached token', async () => {
     expect.assertions(2)
 

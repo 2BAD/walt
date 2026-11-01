@@ -42,6 +42,15 @@ type AuthResponse = {
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
+class AuthEndpointError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
 export class TelegramTokenSource {
   private readonly client: TelegramClient
   private readonly bot: string
@@ -71,7 +80,11 @@ export class TelegramTokenSource {
     this.maxFloodWaitMs = options.maxFloodWaitMs ?? MAX_FLOOD_WAIT_MS
   }
 
-  async token(): Promise<string> {
+  /**
+   * @param rejected - A token the API answered with 401. If it is the cached one, it is renewed even before expiry.
+   */
+  async token(rejected?: string): Promise<string> {
+    if (rejected !== undefined && rejected === this.jwt) this.expiresAt = 0
     if (this.fresh()) return this.jwt as string
     this.pending ??= this.resolve()
     try {
@@ -91,7 +104,10 @@ export class TelegramTokenSource {
     if (this.refreshToken) {
       try {
         return await this.refresh()
-      } catch {
+      } catch (error) {
+        const rejected =
+          error instanceof AuthEndpointError && error.status >= 400 && error.status < 500 && error.status !== 429
+        if (!rejected) throw error
         this.refreshToken = null
       }
     }
@@ -154,7 +170,10 @@ export class TelegramTokenSource {
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify(body)
     })
-    if (!response.ok) throw new Error(`${path} failed (${response.status}): ${(await response.text()).slice(0, 120)}`)
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 120)
+      throw new AuthEndpointError(`${path} failed (${response.status}): ${detail}`, response.status)
+    }
     return (await response.json()) as AuthResponse
   }
 
@@ -162,8 +181,12 @@ export class TelegramTokenSource {
     this.jwt = data.jwt
     this.refreshToken = data.refresh_token
     this.sessionId = data.session_id
-    const parsed = Date.parse(data.access_token_expires_at)
-    this.expiresAt = Number.isNaN(parsed) ? Date.now() + (data.access_token_expires_in ?? 300) * 1000 : parsed
+    if (Number.isFinite(data.access_token_expires_in)) {
+      this.expiresAt = Date.now() + data.access_token_expires_in * 1000
+    } else {
+      const parsed = Date.parse(data.access_token_expires_at)
+      this.expiresAt = Number.isNaN(parsed) ? Date.now() + 300_000 : parsed
+    }
 
     await this.storage?.save({
       jwt: this.jwt,

@@ -9,7 +9,7 @@ const source = new TelegramTokenSource({
   apiHash: process.env.TG_API_HASH ?? ''
 })
 
-const client = new WaltClient({ tokenProvider: () => source.token() })
+const client = new WaltClient({ tokenProvider: (rejected) => source.token(rejected) })
 ```
 
 ## Credentials
@@ -73,7 +73,7 @@ Pass `storage: false` to keep the token in memory only.
 
 ```ts
 const client = new WaltClient({
-  tokenProvider: () => source.token(),
+  tokenProvider: (rejected) => source.token(rejected),
 
   // optional, values are the defaults
   retries: 3, // extra attempts on a transient failure, 0 disables
@@ -96,7 +96,9 @@ const details = await Promise.all(ids.map((id) => client.transactionDetails(id))
 
 ## Other token providers
 
-Any `() => Promise<string>` works as `tokenProvider`.
+Any `(rejected?: string) => Promise<string>` works as `tokenProvider`.
+
+After a 401 it is called again with the rejected token, so it can renew a token that has not expired yet.
 
 ```ts
 const client = new WaltClient({ tokenProvider: async () => 'JWT' })

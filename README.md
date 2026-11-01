@@ -24,7 +24,7 @@ ESM only. Requires Node.js 26 or later.
 import { TelegramTokenSource, WaltClient } from '@2bad/walt'
 
 const source = new TelegramTokenSource({ session: 'SESSION_STRING', apiId: 12345, apiHash: 'API_HASH' })
-const client = new WaltClient({ tokenProvider: () => source.token() })
+const client = new WaltClient({ tokenProvider: (rejected) => source.token(rejected) })
 
 const { entries, total, fiatCurrency } = await client.portfolio()
 console.log(entries[0], total, fiatCurrency) // { currency: 'TON', amount: '120.5', fiatValue: 381.2 } 1250.4 USD

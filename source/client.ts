@@ -34,7 +34,8 @@ const decimal = (value: unknown): number | null => {
 }
 
 export type WaltClientOptions = {
-  tokenProvider: () => Promise<string>
+  /** Called again with the rejected token after a 401, so the provider can renew it before its expiry. */
+  tokenProvider: (rejected?: string) => Promise<string>
   baseUrl?: string
   fetch?: typeof fetch
   /** Extra attempts after a request fails on a transient status. Default 3, `0` disables retrying. */
@@ -637,7 +638,7 @@ const retryAfterOf = (response: Response): number | null => {
 export class WaltClient {
   private readonly baseUrl: string
   private readonly fetchImpl: typeof fetch
-  private readonly tokenProvider: () => Promise<string>
+  private readonly tokenProvider: (rejected?: string) => Promise<string>
   private readonly traceId = hex(16)
   private readonly baggage: string
   private readonly referer: string
@@ -672,9 +673,9 @@ export class WaltClient {
     ].join(',')
   }
 
-  private async ensureToken(): Promise<string> {
+  private async ensureToken(rejected?: string): Promise<string> {
     if (this.token) return this.token
-    this.pending ??= this.mintToken()
+    this.pending ??= this.mintToken(rejected)
     try {
       return await this.pending
     } finally {
@@ -682,8 +683,8 @@ export class WaltClient {
     }
   }
 
-  private async mintToken(): Promise<string> {
-    const token = (await this.tokenProvider()).replace(/^Bearer\s+/i, '')
+  private async mintToken(rejected?: string): Promise<string> {
+    const token = await this.tokenProvider(rejected)
     this.token = token
     return token
   }
@@ -706,12 +707,12 @@ export class WaltClient {
     this.waiting.shift()?.()
   }
 
-  private async send<T>(path: string, body: unknown, allowRefresh: boolean): Promise<T> {
-    const token = await this.ensureToken()
+  private async send<T>(path: string, body: unknown, rejected?: string): Promise<T> {
+    const token = await this.ensureToken(rejected)
     const method = body === undefined ? 'GET' : 'POST'
     const headers: Record<string, string> = {
       ...BROWSER_HEADERS,
-      authorization: token,
+      authorization: token.replace(/^Bearer\s+/i, ''),
       referer: this.referer,
       baggage: this.baggage,
       'sentry-trace': `${this.traceId}-${hex(8)}-0`,
@@ -732,11 +733,9 @@ export class WaltClient {
       throw new WaltRequestError(`${method} ${path} failed (no response)`, 0, null, { cause })
     }
     if (response.status === 401) {
-      if (allowRefresh) {
-        this.token = null
-        return this.send<T>(path, body, false)
-      }
-      throw new WaltAuthError('token rejected after refresh')
+      if (rejected !== undefined) throw new WaltAuthError('token rejected after refresh')
+      if (this.token === token) this.token = null
+      return this.send<T>(path, body, token)
     }
     if (!response.ok) {
       throw new WaltRequestError(
@@ -753,7 +752,7 @@ export class WaltClient {
     try {
       for (let attempt = 0; ; attempt++) {
         try {
-          return await this.send<T>(path, body, true)
+          return await this.send<T>(path, body)
         } catch (error) {
           const transient = error instanceof WaltRequestError && RETRYABLE_STATUS.has(error.status)
           if (!transient || attempt >= retries) throw error

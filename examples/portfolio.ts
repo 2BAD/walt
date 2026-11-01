@@ -9,7 +9,7 @@ if (!session || !apiId || !apiHash) {
 }
 
 const source = new TelegramTokenSource({ session, apiId, apiHash })
-const client = new WaltClient({ tokenProvider: () => source.token() })
+const client = new WaltClient({ tokenProvider: (rejected) => source.token(rejected) })
 
 const { entries, entriesTotal, total, staked, fiatCurrency } = await client.portfolio()
 const line = (label: string, amount: string, value: number): void =>
