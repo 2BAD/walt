@@ -1,5 +1,6 @@
 import { Api, errors, TelegramClient } from 'teleproto'
 import { StringSession } from 'teleproto/sessions/index.js'
+import { BROWSER_HEADERS } from '~/browser.ts'
 import { defaultTokenPath, fileTokenStorage } from '~/telegram/file-storage.ts'
 
 const BASE_URL = 'https://walletbot.me'
@@ -167,7 +168,15 @@ export class TelegramTokenSource {
   private async post(path: string, body: Record<string, unknown>): Promise<AuthResponse> {
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      headers: {
+        ...BROWSER_HEADERS,
+        accept: '*/*',
+        'content-type': 'application/json',
+        origin: this.baseUrl,
+        referer: `${this.baseUrl}/`,
+        'x-wallet-tz-name': Intl.DateTimeFormat().resolvedOptions().timeZone,
+        'x-wallet-tz-offset': String(-new Date().getTimezoneOffset())
+      },
       body: JSON.stringify(body)
     })
     if (!response.ok) {

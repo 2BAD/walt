@@ -1,31 +1,25 @@
 import { randomBytes } from 'node:crypto'
+import { BROWSER_HEADERS } from '~/browser.ts'
 
 const BASE_URL = 'https://walletbot.me'
 
-const SENTRY_RELEASE = '10.0.74110'
+const SENTRY_RELEASE = '10.0.84666'
 const SENTRY_PUBLIC_KEY = '544a92e441a24f17aa6b08e34e728ed2'
 
-const BROWSER_HEADERS = {
-  accept: 'application/json',
-  'accept-encoding': 'gzip, deflate, br, zstd',
-  'accept-language': 'en-US,en;q=0.9',
-  'cache-control': 'no-cache',
-  dnt: '1',
-  pragma: 'no-cache',
-  priority: 'u=1, i',
-  'sec-ch-ua': '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
-  'sec-ch-ua-mobile': '?0',
-  'sec-ch-ua-platform': '"Windows"',
-  'sec-fetch-dest': 'empty',
-  'sec-fetch-mode': 'cors',
-  'sec-fetch-site': 'same-origin',
-  'sec-fetch-storage-access': 'active',
-  'sec-gpc': '1',
-  'user-agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36'
-}
-
 const hex = (bytes: number): string => randomBytes(bytes).toString('hex')
+
+const telegramUserIdOf = (token: string): number | null => {
+  try {
+    const payload = token.replace(/^Bearer\s+/i, '').split('.')[1] ?? ''
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
+      web_view_init_data?: { user?: { id?: unknown } }
+    }
+    const id = claims.web_view_init_data?.user?.id
+    return typeof id === 'number' ? id : null
+  } catch {
+    return null
+  }
+}
 
 const decimal = (value: unknown): number | null => {
   if (typeof value !== 'string' || value.trim() === '') return null
@@ -641,7 +635,6 @@ export class WaltClient {
   private readonly tokenProvider: (rejected?: string) => Promise<string>
   private readonly traceId = hex(16)
   private readonly baggage: string
-  private readonly referer: string
   private readonly retries: number
   private readonly retryDelayMs: number
   private readonly maxConcurrent: number
@@ -660,7 +653,6 @@ export class WaltClient {
     this.retries = options.retries ?? 3
     this.retryDelayMs = options.retryDelayMs ?? 500
     this.maxConcurrent = options.maxConcurrent ?? 4
-    this.referer = `${this.baseUrl}/main`
     this.baggage = [
       'sentry-environment=production',
       `sentry-release=${SENTRY_RELEASE}`,
@@ -710,10 +702,12 @@ export class WaltClient {
   private async send<T>(path: string, body: unknown, rejected?: string): Promise<T> {
     const token = await this.ensureToken(rejected)
     const method = body === undefined ? 'GET' : 'POST'
+    const userId = telegramUserIdOf(token)
     const headers: Record<string, string> = {
       ...BROWSER_HEADERS,
+      accept: 'application/json',
       authorization: token.replace(/^Bearer\s+/i, ''),
-      referer: this.referer,
+      referer: `${this.baseUrl}/main?ep=menu${userId === null ? '' : `&tgWebAppUserId=${userId}`}`,
       baggage: this.baggage,
       'sentry-trace': `${this.traceId}-${hex(8)}-0`,
       traceparent: `00-${hex(16)}-${hex(8)}-01`

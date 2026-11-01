@@ -85,16 +85,30 @@ describe('waltClient', () => {
   })
 
   it('sends the browser headers the web app sends', async () => {
-    expect.assertions(4)
+    expect.assertions(6)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
     await makeClient(fetchImpl).accounts()
     const headers = headersOf(fetchImpl)
 
-    expect(headers['user-agent']).toContain('Chrome/150.0.0.0')
+    expect(headers['user-agent']).toContain('Chrome/156.0.0.0')
+    expect(headers['sec-ch-ua']).toContain('"Google Chrome";v="156"')
+    expect(headers['accept']).toBe('application/json')
     expect(headers['sec-fetch-site']).toBe('same-origin')
-    expect(headers['referer']).toBe('https://walletbot.me/main')
-    expect(headers['baggage']).toContain('sentry-release=10.0.74110')
+    expect(headers['baggage']).toContain('sentry-release=10.0.84666')
+    expect(headers).not.toHaveProperty('sec-fetch-storage-access')
+  })
+
+  it('names the telegram user from the token in the referer', async () => {
+    expect.assertions(1)
+
+    const claims = Buffer.from(JSON.stringify({ web_view_init_data: { user: { id: 10000000001 } } })).toString(
+      'base64url'
+    )
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
+    await makeClient(fetchImpl, `Bearer header.${claims}.signature`).accounts()
+
+    expect(headersOf(fetchImpl)['referer']).toBe('https://walletbot.me/main?ep=menu&tgWebAppUserId=10000000001')
   })
 
   it('points the referer at the configured origin', async () => {
@@ -108,7 +122,7 @@ describe('waltClient', () => {
     })
     await client.accounts()
 
-    expect(headersOf(fetchImpl)['referer']).toBe('https://staging.example/main')
+    expect(headersOf(fetchImpl)['referer']).toBe('https://staging.example/main?ep=menu')
   })
 
   it('keeps one trace id per client but a fresh span per request', async () => {

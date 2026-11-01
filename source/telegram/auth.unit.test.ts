@@ -232,6 +232,29 @@ describe('telegramTokenSource', () => {
     expect(telegram.invoke).toHaveBeenCalledTimes(1)
   })
 
+  it('sends the browser headers the web app sends to auth and refresh', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(authPayload()))
+    const source = makeSource(fetchImpl)
+    await source.token()
+    vi.advanceTimersByTime(300_000)
+    await source.token()
+
+    for (const [, options] of fetchImpl.mock.calls) {
+      expect(options?.headers).toMatchObject({
+        accept: '*/*',
+        'content-type': 'application/json',
+        origin: 'https://walletbot.me',
+        referer: 'https://walletbot.me/',
+        'sec-fetch-mode': 'cors',
+        'user-agent': expect.stringContaining('Chrome/156.0.0.0'),
+        'x-wallet-tz-name': Intl.DateTimeFormat().resolvedOptions().timeZone,
+        'x-wallet-tz-offset': String(-new Date().getTimezoneOffset())
+      })
+    }
+  })
+
   it('surfaces a failed authentication response', async () => {
     expect.assertions(1)
 
