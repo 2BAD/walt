@@ -34,7 +34,8 @@ const source = new TelegramTokenSource({
 
   // optional, values are the defaults
   bot: 'walt', // bot that hosts the mini app
-  baseUrl: 'https://walletbot.me',
+  baseUrl: 'https://walletbot.me', // web app origin, sent as origin and referer
+  authUrl: 'https://alectryon.walletbot.me', // host for sign-in and token refresh
   maxFloodWaitMs: 60_000, // longest FLOOD_WAIT to wait out before throwing
 
   // optional, off by default

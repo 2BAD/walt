@@ -110,7 +110,7 @@ describe('telegramTokenSource', () => {
 
     const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body)) as Record<string, unknown>
 
-    expect(body).toStrictEqual({ web_view_init_data_raw: 'init-data-raw' })
+    expect(body['web_view_init_data_raw']).toBe('init-data-raw')
   })
 
   it('throws when the web view url carries no tgWebAppData', async () => {
@@ -332,6 +332,75 @@ describe('telegramTokenSource', () => {
     expect(tokens).toStrictEqual(['jwt-one', 'jwt-one', 'jwt-one'])
     expect(telegram.invoke).toHaveBeenCalledTimes(1)
     expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('signs in on the alectryon host as a same-site request', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(authPayload()))
+    await makeSource(fetchImpl).token()
+    const [url, options] = fetchImpl.mock.calls[0] ?? []
+
+    expect(String(url)).toBe('https://alectryon.walletbot.me/alectryon/public-api/auth')
+    expect(options?.headers).toMatchObject({ 'sec-fetch-site': 'same-site', origin: 'https://walletbot.me' })
+  })
+
+  it('sends a same-origin request when authUrl matches baseUrl', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(authPayload()))
+    const source = new TelegramTokenSource({
+      session: 'session-string',
+      apiId: 1234,
+      apiHash: 'hash',
+      fetch: fetchImpl,
+      storage: false,
+      authUrl: 'https://walletbot.me'
+    })
+    await source.token()
+    const [url, options] = fetchImpl.mock.calls[0] ?? []
+
+    expect(String(url)).toBe('https://walletbot.me/alectryon/public-api/auth')
+    expect(options?.headers).toMatchObject({ 'sec-fetch-site': 'same-origin' })
+  })
+
+  it('offers a new device serial as a fallback on the first sign-in', async () => {
+    expect.assertions(3)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(authPayload()))
+    await makeSource(fetchImpl).token()
+    const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body)) as Record<string, unknown>
+
+    expect(body).toMatchObject({ ep: 'menu', device_serial_multi_domain_backup_supported: true })
+    expect(body['device_serial_fallback']).toMatch(/^weba:[0-9a-f-]{36}$/)
+    expect(body).not.toHaveProperty('device_serial')
+  })
+
+  it('sends a known device serial as device_serial', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(authPayload()))
+    await makeSource(fetchImpl, { deviceSerial: 'weba:fixed' }).token()
+    const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body)) as Record<string, unknown>
+
+    expect(body['device_serial']).toBe('weba:fixed')
+    expect(body).not.toHaveProperty('device_serial_fallback')
+  })
+
+  it('sends the serial as device_serial when signing in again after the first time', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(authPayload()))
+    const source = makeSource(fetchImpl)
+    await source.token()
+    fetchImpl.mockResolvedValueOnce(jsonResponse({ detail: 'expired' }, 401))
+    vi.advanceTimersByTime(300_000)
+    await source.token()
+    const [first, , third] = fetchImpl.mock.calls.map(
+      ([, options]) => JSON.parse(String(options?.body)) as Record<string, unknown>
+    )
+
+    expect(third?.['device_serial']).toBe(first?.['device_serial_fallback'])
   })
 
   it('persists the token state after authenticating', async () => {

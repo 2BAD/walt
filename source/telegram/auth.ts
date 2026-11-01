@@ -4,6 +4,7 @@ import { BROWSER_HEADERS } from '~/browser.ts'
 import { defaultTokenPath, fileTokenStorage } from '~/telegram/file-storage.ts'
 
 const BASE_URL = 'https://walletbot.me'
+const AUTH_URL = 'https://alectryon.walletbot.me'
 const EXPIRY_SKEW_MS = 30_000
 const MAX_FLOOD_WAIT_MS = 60_000
 
@@ -26,7 +27,10 @@ export type TelegramTokenSourceOptions = {
   apiHash: string
   bot?: string
   deviceSerial?: string
+  /** Origin of the web app, sent as `origin` and `referer`. */
   baseUrl?: string
+  /** Where the auth and refresh requests go. */
+  authUrl?: string
   fetch?: typeof fetch
   /** Defaults to a file in the user cache directory; `false` keeps the token in memory. */
   storage?: TokenStorage | false
@@ -56,11 +60,13 @@ export class TelegramTokenSource {
   private readonly client: TelegramClient
   private readonly bot: string
   private readonly baseUrl: string
+  private readonly authUrl: string
   private readonly fetchImpl: typeof fetch
   private readonly storage: TokenStorage | undefined
   private readonly maxFloodWaitMs: number
 
   private deviceSerial: string
+  private deviceSerialKnown: boolean
   private jwt: string | null = null
   private refreshToken: string | null = null
   private sessionId: string | null = null
@@ -73,8 +79,10 @@ export class TelegramTokenSource {
       connectionRetries: 3
     })
     this.bot = options.bot ?? 'walt'
-    this.deviceSerial = options.deviceSerial ?? `web:${crypto.randomUUID()}`
+    this.deviceSerial = options.deviceSerial ?? `weba:${crypto.randomUUID()}`
+    this.deviceSerialKnown = options.deviceSerial !== undefined
     this.baseUrl = options.baseUrl ?? BASE_URL
+    this.authUrl = options.authUrl ?? AUTH_URL
     this.fetchImpl = options.fetch ?? fetch
     this.storage =
       options.storage === false ? undefined : (options.storage ?? fileTokenStorage(defaultTokenPath(options.session)))
@@ -125,11 +133,24 @@ export class TelegramTokenSource {
     this.sessionId = state.sessionId
     this.expiresAt = state.expiresAt
     this.deviceSerial = state.deviceSerial
+    this.deviceSerialKnown = true
   }
 
   private async authenticate(): Promise<string> {
     const initData = await this.requestInitData()
-    return this.store(await this.post('/alectryon/public-api/auth', { web_view_init_data_raw: initData }))
+    const serial = this.deviceSerialKnown
+      ? { device_serial: this.deviceSerial }
+      : { device_serial_fallback: this.deviceSerial }
+    const token = await this.store(
+      await this.post('/alectryon/public-api/auth', {
+        web_view_init_data_raw: initData,
+        ep: 'menu',
+        device_serial_multi_domain_backup_supported: true,
+        ...serial
+      })
+    )
+    this.deviceSerialKnown = true
+    return token
   }
 
   private async requestInitData(retryAfterFlood = true): Promise<string> {
@@ -166,11 +187,12 @@ export class TelegramTokenSource {
   }
 
   private async post(path: string, body: Record<string, unknown>): Promise<AuthResponse> {
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+    const response = await this.fetchImpl(`${this.authUrl}${path}`, {
       method: 'POST',
       headers: {
         ...BROWSER_HEADERS,
         accept: '*/*',
+        'sec-fetch-site': new URL(this.authUrl).origin === new URL(this.baseUrl).origin ? 'same-origin' : 'same-site',
         'content-type': 'application/json',
         origin: this.baseUrl,
         referer: `${this.baseUrl}/`,
