@@ -784,10 +784,10 @@ export class WaltClient {
     return local_currency
   }
 
-  transactions(cursor?: string, limit?: number): Promise<TransactionsPage> {
+  transactions(limit?: number, cursor?: string): Promise<TransactionsPage> {
     const query = new URLSearchParams()
-    if (cursor !== undefined) query.set('cursor', cursor)
     if (limit !== undefined) query.set('limit', String(limit))
+    if (cursor !== undefined) query.set('cursor', cursor)
     const search = query.size === 0 ? '' : `?${query.toString()}`
     return this.get<TransactionsPage>(`/api/v1/transactions/${search}`)
   }
@@ -812,7 +812,7 @@ export class WaltClient {
   }
 
   allTransactions(limit?: number): AsyncGenerator<Transaction> {
-    return this.walk((cursor) => this.transactions(cursor, limit))
+    return this.walk((cursor) => this.transactions(limit, cursor))
   }
 
   allAccountTransactions(currency: string, limit?: number): AsyncGenerator<Transaction> {

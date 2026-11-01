@@ -13,9 +13,9 @@ const tonRows = await Array.fromAsync(client.allAccountTransactions('TON'))
 Stop on an empty page. `next_cursor` is still set after the last one.
 
 ```ts
-let page = await client.transactions(undefined, 50)
+let page = await client.transactions(50)
 while (page.transactions.length > 0 && page.next_cursor !== null) {
-  page = await client.transactions(page.next_cursor, 50)
+  page = await client.transactions(50, page.next_cursor)
 }
 ```
 

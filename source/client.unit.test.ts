@@ -273,7 +273,7 @@ describe('waltClient', () => {
     expect.assertions(1)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [] }))
-    await makeClient(fetchImpl).transactions('MTAwMDAwMDAwMDAwMDE6Tm9uZQ==')
+    await makeClient(fetchImpl).transactions(undefined, 'MTAwMDAwMDAwMDAwMDE6Tm9uZQ==')
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
       'https://walletbot.me/api/v1/transactions/?cursor=MTAwMDAwMDAwMDAwMDE6Tm9uZQ%3D%3D'
@@ -490,10 +490,10 @@ describe('waltClient', () => {
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [] }))
     const client = makeClient(fetchImpl)
-    await client.transactions('cur/sor', 20)
+    await client.transactions(20, 'cur/sor')
     await client.accountTransactions('TON', 2, 'cur/sor')
 
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/transactions/?cursor=cur%2Fsor&limit=20')
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/transactions/?limit=20&cursor=cur%2Fsor')
     expect(fetchImpl.mock.calls[1]?.[0]).toBe(
       'https://walletbot.me/api/v1/transactions/single-account/?crypto_currency=TON&limit=2&cursor=cur%2Fsor'
     )

@@ -74,7 +74,7 @@ type WaltClient = {
   quote(fromCurrency: string, toCurrency: string, fromAmount: number): Promise<ExchangeQuote>
   createExchange(request: ExchangeRequest): Promise<Exchange> // moves real money, never retried
 
-  transactions(cursor?: string, limit?: number): Promise<TransactionsPage>
+  transactions(limit?: number, cursor?: string): Promise<TransactionsPage>
   accountTransactions(currency: string, limit?: number, cursor?: string): Promise<TransactionsPage>
   allTransactions(limit?: number): AsyncGenerator<Transaction>
   allAccountTransactions(currency: string, limit?: number): AsyncGenerator<Transaction>
