@@ -32,3 +32,22 @@ This moves real money at once. There is no confirm step.
 If it throws, check the balances before trying again.
 
 Set `max_amount: true` to sell the whole balance.
+
+## Limit orders
+
+```ts
+const quote = await client.limitOrderQuote('NVDAx', 'BUY', 170, { amount: 25 })
+// quote.quantity '0.147058', quote.fee '0.05'
+```
+
+Only `BUY` orders are accepted.
+
+Size an order by `amount` to spend or by `quantity` to receive.
+
+`limitOrderTokens()` lists what can be bought, with the smallest order in USDT as `min_limit`.
+
+```ts
+const open = await client.limitOrders({ status: ['OPEN'] })
+```
+
+Filled orders carry `execution` with the fill price and amounts.

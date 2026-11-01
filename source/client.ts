@@ -8,9 +8,14 @@ const SENTRY_PUBLIC_KEY = '544a92e441a24f17aa6b08e34e728ed2'
 
 const hex = (bytes: number): string => randomBytes(bytes).toString('hex')
 
+const calendarDate = (date: Date): string =>
+  [date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()]
+    .map((part) => String(part).padStart(2, '0'))
+    .join('-')
+
 const telegramUserIdOf = (token: string): number | null => {
   try {
-    const payload = token.replace(/^Bearer\s+/i, '').split('.')[1] ?? ''
+    const payload = token.split('.')[1] ?? ''
     const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
       web_view_init_data?: { user?: { id?: unknown } }
     }
@@ -560,6 +565,98 @@ export type PnlResponse = {
   total: PnlTotals
 }
 
+export type PortfolioFlows = {
+  total: string
+  crypto_transfer: string
+  transfer: string
+  p2p: string
+  on_ramp: string
+  off_ramp: string
+  earn: string
+  gift: string
+  wpay: string
+  trading_agent: string
+  other: string
+}
+
+/** Fiat amounts over one period. */
+export type PortfolioPeriod = {
+  date_from: string
+  date_to: string
+  open_balance_fiat: string
+  close_amount_fiat: string
+  total_pnl: string
+  total_pnl_percent: string | null
+  realized_pnl_details: { total: string; total_percent: string | null; spot: string; perps: string; earns: string }
+  unrealized_pnl_details: { total: string; total_percent: string | null }
+  deposits_details: PortfolioFlows
+  withdrawals_details: PortfolioFlows
+}
+
+export type PortfolioHistory = {
+  fiat_currency: string
+  chart: { data_points: PortfolioPeriod[] }
+  total_period_details: PortfolioPeriod
+}
+
+export type LimitOrder = {
+  id: string
+  client_order_id: string
+  base_currency: string
+  side: string
+  /** `LIMIT`, or `TP` and `SL` for take-profit and stop-loss orders. */
+  type: string
+  price_limit: string
+  quantity: string
+  multiplier: string
+  spv_price_limit: string
+  spv_quantity: string
+  fee: string
+  fee_currency: string
+  total: string
+  /** For example `OPEN`, `CANCELLING`, `CANCELLED` or `FILLED`. */
+  status: string
+  created_at: string
+  updated_at: string
+  /** Only on filled orders. */
+  executed_at?: string
+  /** Only on filled orders. */
+  execution?: { filled_quantity: string; filled_quote_amount: string; price: string }
+}
+
+export type LimitOrderQuote = {
+  base_currency: string
+  side: string
+  price_limit: string
+  quantity: string
+  multiplier: string
+  spv_price_limit: string
+  spv_quantity: string
+  notional: string
+  fee: string
+  fee_currency: string
+  total: string
+  fee_discount: { kind: string; regular_amount: string; reason: string }
+}
+
+export type LimitOrderBounds = {
+  base_currency: string
+  price: string
+  max_price_limit: string
+  take_profit_min_price: string
+  stop_loss_max_price: string
+  price_decimals: number
+  updated_at: string
+}
+
+export type LimitOrderToken = {
+  code: string
+  /** Smallest order, in USDT. */
+  min_limit: string
+  max_limit: string
+  quantity_decimals: number
+}
+
 /** Each exchangeable currency mapped to its counterparts. Pairs appear in both directions. */
 export type AvailableExchanges = Record<string, string[]>
 
@@ -730,11 +827,12 @@ export class WaltClient {
   private async send<T>(path: string, body: unknown, rejected?: string): Promise<T> {
     const token = await this.ensureToken(rejected)
     const method = body === undefined ? 'GET' : 'POST'
-    const userId = telegramUserIdOf(token)
+    const jwt = token.replace(/^Bearer\s+/i, '')
+    const userId = telegramUserIdOf(jwt)
     const headers: Record<string, string> = {
       ...BROWSER_HEADERS,
       accept: 'application/json',
-      authorization: token.replace(/^Bearer\s+/i, ''),
+      authorization: path.startsWith('/emporos/') ? `Bearer ${jwt}` : jwt,
       referer: `${this.baseUrl}/main?ep=menu${userId === null ? '' : `&tgWebAppUserId=${userId}`}`,
       baggage: this.baggage,
       'sentry-trace': `${this.traceId}-${hex(8)}-0`,
@@ -970,6 +1068,70 @@ export class WaltClient {
 
   pnl(): Promise<PnlResponse> {
     return this.get<PnlResponse>('/customer-analytics/public-api/v1/pnl/assets/')
+  }
+
+  /**
+   * Balance, P/L, deposits and withdrawals per day or per calendar month, plus totals for the whole range.
+   *
+   * @param dateFrom - Start of the first period, as a `Date` or `YYYY-MM-DD`. A `Date` counts by its UTC day.
+   * @param resolution - `1d` for days, `1m` for months.
+   */
+  portfolioHistory(dateFrom: Date | string, resolution: '1d' | '1m'): Promise<PortfolioHistory> {
+    const query = new URLSearchParams({
+      date_from: dateFrom instanceof Date ? calendarDate(dateFrom) : dateFrom,
+      resolution
+    })
+    return this.get<PortfolioHistory>(`/customer-analytics/public-api/v1/portfolio/private/?${query.toString()}`)
+  }
+
+  /**
+   * @param options - Filters, all optional.
+   * @param options.status - Only orders in these states, such as `OPEN`.
+   * @param options.limit - Most orders to return.
+   */
+  async limitOrders(options: { status?: string[]; limit?: number } = {}): Promise<LimitOrder[]> {
+    const query = new URLSearchParams()
+    for (const status of options.status ?? []) query.append('status', status)
+    if (options.limit !== undefined) query.set('limit', String(options.limit))
+    const search = query.size === 0 ? '' : `?${query.toString()}`
+    const { items } = await this.get<{ items: LimitOrder[] }>(`/emporos/public-api/orders/limit${search}`)
+    return items
+  }
+
+  limitOrder(id: string): Promise<LimitOrder> {
+    const query = new URLSearchParams({ id })
+    return this.get<LimitOrder>(`/emporos/public-api/orders/limit/by-id?${query.toString()}`)
+  }
+
+  /**
+   * Fee and fill for a limit order, without placing it. Only `BUY` is accepted.
+   *
+   * @param baseCurrency - What is bought, from `limitOrderTokens()`.
+   * @param side - `SELL` is a valid value that the API currently rejects.
+   * @param priceLimit - Highest price to pay per unit.
+   * @param size - `amount` to spend, or `quantity` of `baseCurrency` to receive.
+   */
+  limitOrderQuote(
+    baseCurrency: string,
+    side: 'BUY' | 'SELL',
+    priceLimit: number | string,
+    size: { amount: number | string } | { quantity: number | string }
+  ): Promise<LimitOrderQuote> {
+    const query = new URLSearchParams({ base_currency: baseCurrency, side, price_limit: String(priceLimit) })
+    if ('amount' in size) query.set('amount', String(size.amount))
+    else query.set('quantity', String(size.quantity))
+    return this.get<LimitOrderQuote>(`/emporos/public-api/orders/limit/quote?${query.toString()}`)
+  }
+
+  limitOrderBounds(baseCurrency: string): Promise<LimitOrderBounds> {
+    const query = new URLSearchParams({ base_currency: baseCurrency })
+    return this.get<LimitOrderBounds>(`/emporos/public-api/orders/limit/bounds?${query.toString()}`)
+  }
+
+  /** Every currency a limit order can buy. */
+  async limitOrderTokens(): Promise<LimitOrderToken[]> {
+    const { tokens } = await this.get<{ tokens: LimitOrderToken[] }>('/emporos/public-api/orders/limit/tokens')
+    return tokens
   }
 
   coinDetails(currency: string, fiatCurrency: FiatCurrency): Promise<CoinDetails> {

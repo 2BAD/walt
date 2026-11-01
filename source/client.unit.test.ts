@@ -853,6 +853,87 @@ describe('waltClient earn', () => {
   })
 })
 
+describe('waltClient portfolio history', () => {
+  it('sends a date as its utc calendar day', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ chart: { data_points: [] } }))
+    await makeClient(fetchImpl).portfolioHistory(new Date('2026-01-01T23:30:00.000Z'), '1m')
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/customer-analytics/public-api/v1/portfolio/private/?date_from=2026-01-01&resolution=1m'
+    )
+  })
+})
+
+describe('waltClient limit orders', () => {
+  it('sends a bearer token to the order service and a raw one elsewhere', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ items: [], accounts: [] }))
+    const client = makeClient(fetchImpl, 'Bearer jwt.token.value')
+    await client.limitOrders()
+    await client.accounts()
+
+    expect(authHeaderOf(fetchImpl, 0)).toBe('Bearer jwt.token.value')
+    expect(authHeaderOf(fetchImpl, 1)).toBe('jwt.token.value')
+  })
+
+  it('lists orders filtered by status and returns the items', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ items: [{ id: 'order-1' }] }))
+    const orders = await makeClient(fetchImpl).limitOrders({ status: ['OPEN', 'CANCELLING'], limit: 100 })
+
+    expect(orders).toStrictEqual([{ id: 'order-1' }])
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/emporos/public-api/orders/limit?status=OPEN&status=CANCELLING&limit=100'
+    )
+  })
+
+  it('fetches one order by id', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ id: 'order-1' }))
+    await makeClient(fetchImpl).limitOrder('order-1')
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/emporos/public-api/orders/limit/by-id?id=order-1')
+  })
+
+  it.each([
+    [{ amount: 25 }, 'amount=25'],
+    [{ quantity: '0.0001' }, 'quantity=0.0001']
+  ])('quotes an order sized by %o', async (size, expected) => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}))
+    await makeClient(fetchImpl).limitOrderQuote('BTC', 'BUY', 50000, size)
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      `https://walletbot.me/emporos/public-api/orders/limit/quote?base_currency=BTC&side=BUY&price_limit=50000&${expected}`
+    )
+  })
+
+  it('asks for the bounds of one currency', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}))
+    await makeClient(fetchImpl).limitOrderBounds('NVDAx')
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/emporos/public-api/orders/limit/bounds?base_currency=NVDAx'
+    )
+  })
+
+  it('returns the tokens', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ tokens: [{ code: 'BTC' }] }))
+
+    expect(await makeClient(fetchImpl).limitOrderTokens()).toStrictEqual([{ code: 'BTC' }])
+  })
+})
+
 describe('waltClient detailsFor', () => {
   const rows = (count: number) =>
     Array.from({ length: count }, (_, index) => ({ id: 10000000000001 + index }) as Transaction)

@@ -36,7 +36,7 @@ await source.disconnect()
 - [Connecting](examples/connecting.md): Telegram credentials, token storage, retries and pacing
 - [Balances](examples/balances.md): accounts, portfolio, profit and loss, staked funds
 - [Prices](examples/prices.md): coin rates, charts and past prices
-- [Exchange](examples/exchange.md): available pairs, quotes and exchanges
+- [Exchange](examples/exchange.md): available pairs, quotes, exchanges and limit orders
 - [Transactions](examples/transactions.md): history, details and reading a transaction
 - [Errors](examples/errors.md): `WaltRequestError`, `WaltAuthError` and what is retried
 
@@ -58,6 +58,7 @@ type WaltClient = {
   accounts(): Promise<AccountsResponse>
   portfolio(): Promise<Portfolio>
   pnl(): Promise<PnlResponse>
+  portfolioHistory(dateFrom: Date | string, resolution: '1d' | '1m'): Promise<PortfolioHistory>
   frozenBalances<T = unknown>(): Promise<T[]>
 
   earnCampaigns(): Promise<EarnCampaignsResponse>
@@ -74,6 +75,12 @@ type WaltClient = {
   availableExchanges(): Promise<AvailableExchanges>
   quote(fromCurrency: string, toCurrency: string, fromAmount: number): Promise<ExchangeQuote>
   createExchange(request: ExchangeRequest): Promise<Exchange> // moves real money, never retried
+
+  limitOrders(options?: { status?: string[]; limit?: number }): Promise<LimitOrder[]>
+  limitOrder(id: string): Promise<LimitOrder>
+  limitOrderQuote(baseCurrency: string, side: 'BUY' | 'SELL', priceLimit: number | string, size: { amount: number | string } | { quantity: number | string }): Promise<LimitOrderQuote>
+  limitOrderBounds(baseCurrency: string): Promise<LimitOrderBounds>
+  limitOrderTokens(): Promise<LimitOrderToken[]>
 
   transactions(limit?: number, cursor?: string): Promise<TransactionsPage>
   accountTransactions(currency: string, limit?: number, cursor?: string): Promise<TransactionsPage>

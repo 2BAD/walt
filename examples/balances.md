@@ -58,6 +58,20 @@ for (const campaign of joined) {
 
 `earnCampaignTransactions()` returns one page. Pass the previous page as `after` to get the next one.
 
+## `portfolioHistory()`
+
+Balance, profit and loss, deposits and withdrawals per day (`1d`) or per calendar month (`1m`).
+
+```ts
+const { chart, total_period_details } = await client.portfolioHistory('2026-01-01', '1m')
+
+for (const period of chart.data_points) {
+  console.log(period.date_from, period.close_amount_fiat, period.total_pnl) // 2026-01-01T00:00:00Z 1250.40 12.75
+}
+```
+
+`total_period_details` sums the whole range.
+
 ## Frozen and unconfirmed
 
 No rows have been seen for `frozenBalances()` or `unconfirmedTransactions()`. Pass your own row type.
