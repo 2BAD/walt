@@ -28,6 +28,8 @@ const detailsOf = (overrides: Partial<TransactionDetails>): TransactionDetails =
   username: null,
   tg_id: null,
   transfer_id: null,
+  tg_transfer_status: null,
+  payment_link_id: null,
   mention: null,
   comment: null,
   input_addresses: null,

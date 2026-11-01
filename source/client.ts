@@ -201,6 +201,7 @@ export type CoinDetails = {
   circulating_supply: string | null
   chart_preview_rate_24h: { timestamp: number; value: string }[]
   trading_hours_state: TradingHoursState | null
+  mira_summary: { summary: string; bot_url: string; updated_at: string } | null
 }
 
 export type TransactionGateway =
@@ -257,6 +258,12 @@ export type TransactionGateway =
   | 'tg_stars_purchase'
   | 'ipo'
   | 'ipo_allocation'
+  | 'loyalty_payout'
+  | 'crypto_card_cashback'
+  | 'affiliate_payout'
+  | 'limit_swap'
+  | 'payment_link'
+  | 'bot_banking'
 
 export type Transaction = {
   id: number
@@ -323,6 +330,8 @@ export type TransactionDetails = {
   username: string | null
   tg_id: number | null
   transfer_id: string | null
+  tg_transfer_status: string | null
+  payment_link_id: string | null
   mention: string | null
   comment: string | null
   input_addresses: string | null
@@ -399,6 +408,7 @@ export type Charts = {
 }
 
 export type EarnAccount = {
+  account_id: number
   /** Units staked in this campaign, absent from `accounts()`. */
   balance: string
   paid_out_amount: string
@@ -416,6 +426,7 @@ export type EarnAccessPolicy = {
 }
 
 export type EarnBonus = {
+  account_id: number | null
   name: string
   status: string
   apy: string
