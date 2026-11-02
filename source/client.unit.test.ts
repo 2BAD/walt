@@ -1,117 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Transaction } from '~/api/transactions.ts'
-import { type WaltClientOptions, WaltAuthError, WaltClient, WaltRequestError } from '~/client.ts'
+import { WaltClient } from '~/client.ts'
+import { WaltAuthError, WaltRequestError } from '~/transport.ts'
 
 type FetchMock = ReturnType<typeof vi.fn<typeof fetch>>
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
-const makeClient = (fetchImpl: FetchMock, token = 'jwt.token.value') =>
-  new WaltClient({ tokenProvider: async () => token, fetch: fetchImpl })
-
-const headersOf = (fetchImpl: FetchMock, call = 0) => {
-  const [, options] = fetchImpl.mock.calls[call] ?? []
-  return (options?.headers ?? {}) as Record<string, string>
-}
-
-const authHeaderOf = (fetchImpl: FetchMock, call = 0) => headersOf(fetchImpl, call)['authorization']
+const makeClient = (fetchImpl: FetchMock) =>
+  new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
 
 describe('waltClient', () => {
   it('requires a tokenProvider', () => {
     expect.assertions(1)
 
     expect(() => new WaltClient({} as unknown as { tokenProvider: () => Promise<string> })).toThrow(WaltAuthError)
-  })
-
-  it('sends the raw token in the Authorization header (no Bearer prefix)', async () => {
-    expect.assertions(2)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
-    await makeClient(fetchImpl).accounts()
-
-    expect(fetchImpl.mock.calls[0]?.[0]).toContain('/api/v1/accounts/')
-    expect(authHeaderOf(fetchImpl)).toBe('jwt.token.value')
-  })
-
-  it('strips a leading Bearer prefix from the provided token', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
-    await makeClient(fetchImpl, 'Bearer jwt.token.value').accounts()
-
-    expect(authHeaderOf(fetchImpl)).toBe('jwt.token.value')
-  })
-
-  it('sends the browser headers the web app sends', async () => {
-    expect.assertions(6)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
-    await makeClient(fetchImpl).accounts()
-    const headers = headersOf(fetchImpl)
-
-    expect(headers['user-agent']).toContain('Chrome/156.0.0.0')
-    expect(headers['sec-ch-ua']).toContain('"Google Chrome";v="156"')
-    expect(headers['accept']).toBe('application/json')
-    expect(headers['sec-fetch-site']).toBe('same-origin')
-    expect(headers['baggage']).toContain('sentry-release=10.0.84666')
-    expect(headers).not.toHaveProperty('sec-fetch-storage-access')
-  })
-
-  it('names the telegram user from the token in the referer', async () => {
-    expect.assertions(1)
-
-    const claims = Buffer.from(JSON.stringify({ web_view_init_data: { user: { id: 10000000001 } } })).toString(
-      'base64url'
-    )
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
-    await makeClient(fetchImpl, `Bearer header.${claims}.signature`).accounts()
-
-    expect(headersOf(fetchImpl)['referer']).toBe('https://walletbot.me/main?ep=menu&tgWebAppUserId=10000000001')
-  })
-
-  it('points the referer at the configured origin', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
-    const client = new WaltClient({
-      tokenProvider: async () => 'jwt.token.value',
-      baseUrl: 'https://staging.example',
-      fetch: fetchImpl
-    })
-    await client.accounts()
-
-    expect(headersOf(fetchImpl)['referer']).toBe('https://staging.example/main?ep=menu')
-  })
-
-  it('keeps one trace id per client but a fresh span per request', async () => {
-    expect.assertions(4)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
-    const client = makeClient(fetchImpl)
-    await client.accounts()
-    await client.accounts()
-
-    const [first, second] = [headersOf(fetchImpl, 0), headersOf(fetchImpl, 1)]
-    const traceOf = (headers: Record<string, string>) => headers['sentry-trace']?.split('-') ?? []
-
-    expect(first['sentry-trace']).toMatch(/^[0-9a-f]{32}-[0-9a-f]{16}-0$/)
-    expect(traceOf(first)[0]).toBe(traceOf(second)[0])
-    expect(traceOf(first)[1]).not.toBe(traceOf(second)[1])
-    expect(first['traceparent']).not.toBe(second['traceparent'])
-  })
-
-  it('asks the provider only once while the token keeps working', async () => {
-    expect.assertions(1)
-
-    const tokenProvider = vi.fn<() => Promise<string>>(async () => 'jwt.token.value')
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
-    const client = new WaltClient({ tokenProvider, fetch: fetchImpl })
-
-    await client.accounts()
-    await client.accounts()
-
-    expect(tokenProvider).toHaveBeenCalledTimes(1)
   })
 
   it('builds a portfolio from the accounts response', async () => {
@@ -483,39 +387,6 @@ describe('waltClient', () => {
     )
   })
 
-  it('keeps a json error body on the error', async () => {
-    expect.assertions(2)
-
-    const body = { code: 'market_order_max_limit_error', detail: 'too much' }
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(body, 400))
-    const request = makeClient(fetchImpl).quote('USDT', 'BTC', 1)
-
-    await expect(request).rejects.toBeInstanceOf(WaltRequestError)
-    await expect(request).rejects.toMatchObject({ status: 400, body })
-  })
-
-  it('keeps a non-json error body as text', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => new Response('<html>forbidden</html>', { status: 403 }))
-
-    await expect(makeClient(fetchImpl).accounts()).rejects.toMatchObject({
-      status: 403,
-      body: '<html>forbidden</html>'
-    })
-  })
-
-  it('turns a successful response that is not json into a request error', async () => {
-    expect.assertions(3)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => new Response('<html>challenge</html>', { status: 200 }))
-    const request = makeClient(fetchImpl).accounts()
-
-    await expect(request).rejects.toBeInstanceOf(WaltRequestError)
-    await expect(request).rejects.toMatchObject({ status: 200, body: '<html>challenge</html>' })
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
-  })
-
   it.each([
     [{ maxConcurrent: 0 }, 'maxConcurrent'],
     [{ maxConcurrent: Number.NaN }, 'maxConcurrent'],
@@ -533,188 +404,6 @@ describe('waltClient', () => {
     expect.assertions(1)
 
     expect(() => new WaltClient({ tokenProvider: async () => 'jwt', maxConcurrent: Infinity })).not.toThrow()
-  })
-
-  it('throws on a non-401 error status', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ detail: 'boom' }, 500))
-
-    await expect(makeClient(fetchImpl).accounts()).rejects.toThrow('failed (500)')
-  })
-
-  it('refreshes on 401 and retries once', async () => {
-    expect.assertions(2)
-
-    const tokens = ['stale', 'fresh']
-    const tokenProvider = vi.fn<() => Promise<string>>(async () => tokens.shift() ?? 'fresh')
-    const fetchImpl = vi.fn<typeof fetch>(async (_url, options) => {
-      const auth = (options?.headers as Record<string, string> | undefined)?.['authorization']
-      return auth === 'fresh' ? jsonResponse({ accounts: [] }) : jsonResponse({ code: 'token_corrupted' }, 401)
-    })
-
-    await new WaltClient({ tokenProvider, fetch: fetchImpl }).accounts()
-
-    expect(tokenProvider).toHaveBeenCalledTimes(2)
-    expect(fetchImpl).toHaveBeenCalledTimes(2)
-  })
-
-  it('hands the rejected token back to the provider on 401', async () => {
-    expect.assertions(1)
-
-    const tokens = ['Bearer stale', 'fresh']
-    const tokenProvider = vi.fn<(rejected?: string) => Promise<string>>(async () => tokens.shift() ?? 'fresh')
-    const fetchImpl = vi.fn<typeof fetch>(async (_url, options) => {
-      const auth = (options?.headers as Record<string, string> | undefined)?.['authorization']
-      return auth === 'fresh' ? jsonResponse({ accounts: [] }) : jsonResponse({ code: 'token_corrupted' }, 401)
-    })
-
-    await new WaltClient({ tokenProvider, fetch: fetchImpl }).accounts()
-
-    expect(tokenProvider.mock.calls).toStrictEqual([[undefined], ['Bearer stale']])
-  })
-
-  it('asks the provider once when concurrent requests hit a 401 together', async () => {
-    expect.assertions(2)
-
-    const tokens = ['stale', 'fresh']
-    const tokenProvider = vi.fn<(rejected?: string) => Promise<string>>(async () => tokens.shift() ?? 'fresh')
-    const fetchImpl = vi.fn<typeof fetch>(async (_url, options) => {
-      const auth = (options?.headers as Record<string, string> | undefined)?.['authorization']
-      return auth === 'fresh' ? jsonResponse({ accounts: [] }) : jsonResponse({ code: 'token_corrupted' }, 401)
-    })
-    const client = new WaltClient({ tokenProvider, fetch: fetchImpl })
-
-    await Promise.all([client.accounts(), client.accounts(), client.accounts()])
-
-    expect(tokenProvider).toHaveBeenCalledTimes(2)
-    expect(fetchImpl).toHaveBeenCalledTimes(6)
-  })
-
-  it('asks the provider once for concurrent requests with no cached token', async () => {
-    expect.assertions(2)
-
-    const tokenProvider = vi.fn<() => Promise<string>>(async () => 'jwt.token.value')
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
-    const client = new WaltClient({ tokenProvider, fetch: fetchImpl })
-
-    await Promise.all([client.accounts(), client.accounts(), client.accounts()])
-
-    expect(tokenProvider).toHaveBeenCalledTimes(1)
-    expect(fetchImpl).toHaveBeenCalledTimes(3)
-  })
-
-  it('gives up after a single refresh attempt', async () => {
-    expect.assertions(2)
-
-    const tokenProvider = vi.fn<() => Promise<string>>(async () => 'always-stale')
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ code: 'token_corrupted' }, 401))
-    const client = new WaltClient({ tokenProvider, fetch: fetchImpl })
-
-    await expect(client.accounts()).rejects.toBeInstanceOf(WaltAuthError)
-    expect(fetchImpl).toHaveBeenCalledTimes(2)
-  })
-})
-
-describe('waltClient retries', () => {
-  const retryingClient = (fetchImpl: FetchMock, options: Partial<WaltClientOptions> = {}) =>
-    new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl, retryDelayMs: 0, ...options })
-
-  it('retries a 503 until it succeeds', async () => {
-    expect.assertions(2)
-
-    let calls = 0
-    const fetchImpl = vi.fn<typeof fetch>(async () => {
-      calls++
-      return calls < 3 ? jsonResponse({}, 503) : jsonResponse({ accounts: [] })
-    })
-
-    await expect(retryingClient(fetchImpl).accounts()).resolves.toStrictEqual({ accounts: [] })
-    expect(fetchImpl).toHaveBeenCalledTimes(3)
-  })
-
-  it('gives up after the configured number of extra attempts', async () => {
-    expect.assertions(2)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}, 503))
-
-    await expect(retryingClient(fetchImpl, { retries: 2 }).accounts()).rejects.toBeInstanceOf(WaltRequestError)
-    expect(fetchImpl).toHaveBeenCalledTimes(3)
-  })
-
-  it('does not retry a 500, which this api returns for bad input', async () => {
-    expect.assertions(2)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}, 500))
-
-    await expect(retryingClient(fetchImpl).accounts()).rejects.toThrow('failed (500)')
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
-  })
-
-  it('retries when fetch never returns a response', async () => {
-    expect.assertions(2)
-
-    let calls = 0
-    const fetchImpl = vi.fn<typeof fetch>(async () => {
-      calls++
-      if (calls === 1) throw new TypeError('network down')
-      return jsonResponse({ accounts: [] })
-    })
-
-    await expect(retryingClient(fetchImpl).accounts()).resolves.toStrictEqual({ accounts: [] })
-    expect(fetchImpl).toHaveBeenCalledTimes(2)
-  })
-
-  it('prefers retry-after over its own backoff', async () => {
-    expect.assertions(1)
-
-    let calls = 0
-    const fetchImpl = vi.fn<typeof fetch>(async () => {
-      calls++
-      return calls === 1
-        ? new Response('{}', { status: 503, headers: { 'retry-after': '0' } })
-        : jsonResponse({ accounts: [] })
-    })
-
-    // A ten minute base delay would stall this test if retry-after were ignored.
-    await expect(retryingClient(fetchImpl, { retryDelayMs: 600_000 }).accounts()).resolves.toStrictEqual({
-      accounts: []
-    })
-  })
-
-  it('carries the status on the error it throws', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}, 429))
-
-    await expect(retryingClient(fetchImpl, { retries: 0 }).accounts()).rejects.toMatchObject({ status: 429 })
-  })
-
-  it('keeps no more than maxConcurrent requests in flight', async () => {
-    expect.assertions(2)
-
-    let inFlight = 0
-    let peak = 0
-    const holds: (() => void)[] = []
-    const fetchImpl = vi.fn<typeof fetch>(async () => {
-      inFlight++
-      peak = Math.max(peak, inFlight)
-      await new Promise<void>((resolve) => holds.push(resolve))
-      inFlight--
-      return jsonResponse({ accounts: [] })
-    })
-
-    const client = retryingClient(fetchImpl, { maxConcurrent: 2 })
-    const all = Promise.all(Array.from({ length: 6 }, () => client.accounts()))
-    // Six requests two at a time is three waves; the extra rounds are slack.
-    for (let round = 0; round < 12; round++) {
-      await new Promise((resolve) => setTimeout(resolve, 0))
-      holds.splice(0).forEach((release) => release())
-    }
-
-    await all
-    expect(fetchImpl).toHaveBeenCalledTimes(6)
-    expect(peak).toBe(2)
   })
 })
 
@@ -824,18 +513,6 @@ describe('waltClient portfolio history', () => {
 })
 
 describe('waltClient limit orders', () => {
-  it('sends a bearer token to the order service and a raw one elsewhere', async () => {
-    expect.assertions(2)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ items: [], accounts: [] }))
-    const client = makeClient(fetchImpl, 'Bearer jwt.token.value')
-    await client.limitOrders()
-    await client.accounts()
-
-    expect(authHeaderOf(fetchImpl, 0)).toBe('Bearer jwt.token.value')
-    expect(authHeaderOf(fetchImpl, 1)).toBe('jwt.token.value')
-  })
-
   it('lists orders filtered by status and returns the items', async () => {
     expect.assertions(2)
 
@@ -1051,8 +728,8 @@ describe('waltClient exchange', () => {
     expect(pairs).toStrictEqual({ BTC: ['TON', 'USDT'] })
   })
 
-  it('posts a quote as json with the origin the web app sends', async () => {
-    expect.assertions(5)
+  it('posts a quote as json', async () => {
+    expect.assertions(3)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(quoteResponse))
     await makeClient(fetchImpl).quote('USDT', 'XLEx', 1)
@@ -1060,25 +737,11 @@ describe('waltClient exchange', () => {
 
     expect(url).toContain('/api/v1/exchange/convert/')
     expect(options?.method).toBe('POST')
-    expect(headersOf(fetchImpl)['content-type']).toBe('application/json')
-    expect(headersOf(fetchImpl)['origin']).toBe('https://walletbot.me')
     expect(JSON.parse(String(options?.body))).toStrictEqual({
       from_amount: 1,
       from_currency: 'USDT',
       to_currency: 'XLEx'
     })
-  })
-
-  it('does not send a body or an origin on a GET', async () => {
-    expect.assertions(3)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
-    await makeClient(fetchImpl).accounts()
-    const [, options] = fetchImpl.mock.calls[0] ?? []
-
-    expect(options?.body).toBeNull()
-    expect(headersOf(fetchImpl)['origin']).toBeUndefined()
-    expect(headersOf(fetchImpl)['content-type']).toBeUndefined()
   })
 
   it('sends the whole exchange request through unchanged', async () => {
@@ -1119,33 +782,5 @@ describe('waltClient exchange', () => {
 
     await expect(client.createExchange(request)).rejects.toBeInstanceOf(WaltRequestError)
     expect(fetchImpl).toHaveBeenCalledTimes(1)
-  })
-
-  it('replays the body when the token is refreshed on a 401', async () => {
-    expect.assertions(3)
-
-    const tokens = ['stale', 'fresh']
-    const tokenProvider = vi.fn<() => Promise<string>>(async () => tokens.shift() ?? 'fresh')
-    const fetchImpl = vi.fn<typeof fetch>(async (_url, options) => {
-      const auth = (options?.headers as Record<string, string> | undefined)?.['authorization']
-      return auth === 'fresh' ? jsonResponse(quoteResponse) : jsonResponse({ code: 'token_corrupted' }, 401)
-    })
-
-    await new WaltClient({ tokenProvider, fetch: fetchImpl }).quote('USDT', 'XLEx', 1)
-    const bodies = fetchImpl.mock.calls.map(([, options]) => String(options?.body))
-
-    expect(fetchImpl).toHaveBeenCalledTimes(2)
-    expect(bodies[0]).toBe(bodies[1])
-    expect(headersOf(fetchImpl, 1)['authorization']).toBe('fresh')
-  })
-
-  it('names the method in the error', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ detail: 'bad' }, 422))
-
-    await expect(makeClient(fetchImpl).quote('USDT', 'XLEx', 1)).rejects.toThrow(
-      'POST /api/v1/exchange/convert/ failed (422)'
-    )
   })
 })

@@ -1,33 +1,17 @@
-import { randomBytes } from 'node:crypto'
 import type { AccountsResponse, Charts, Coin, CoinDetails, FiatCurrency, PriceAtTime } from '~/api/accounts.ts'
 import type { PnlResponse, PortfolioHistory } from '~/api/analytics.ts'
 import type { EarnCampaignsResponse, EarnRate, EarnTransaction, EarnTransactionsPage } from '~/api/earn.ts'
 import type { AvailableExchanges, Exchange, ExchangeQuote, ExchangeRequest } from '~/api/exchange.ts'
 import type { LimitOrder, LimitOrderBounds, LimitOrderQuote, LimitOrderToken } from '~/api/limit-orders.ts'
 import type { Transaction, TransactionDetails, TransactionGateway, TransactionsPage } from '~/api/transactions.ts'
-import { BROWSER_HEADERS, SENTRY_PUBLIC_KEY, SENTRY_RELEASE } from '~/browser.ts'
+import { Transport, WaltAuthError } from '~/transport.ts'
 
 const BASE_URL = 'https://walletbot.me'
-
-const hex = (bytes: number): string => randomBytes(bytes).toString('hex')
 
 const calendarDate = (date: Date): string =>
   [date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()]
     .map((part) => String(part).padStart(2, '0'))
     .join('-')
-
-const telegramUserIdOf = (token: string): number | null => {
-  try {
-    const payload = token.split('.')[1] ?? ''
-    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
-      web_view_init_data?: { user?: { id?: unknown } }
-    }
-    const id = claims.web_view_init_data?.user?.id
-    return typeof id === 'number' ? id : null
-  } catch {
-    return null
-  }
-}
 
 const decimal = (value: unknown): number | null => {
   if (typeof value !== 'string' || value.trim() === '') return null
@@ -65,212 +49,45 @@ export type Portfolio = {
   fiatCurrency: string
 }
 
-export class WaltAuthError extends Error {}
-
-export class WaltRequestError extends Error {
-  /** HTTP status, or `0` when the request never got a response. */
-  readonly status: number
-  /** From a `retry-after` given in seconds. */
-  readonly retryAfterMs: number | null
-  /** The response body, parsed when it is JSON, such as `{ code: 'market_order_max_limit_error', detail }`. */
-  readonly body: unknown
-
-  constructor(message: string, status: number, retryAfterMs: number | null, body: unknown, options?: ErrorOptions) {
-    super(message, options)
-    this.status = status
-    this.retryAfterMs = retryAfterMs
-    this.body = body
-  }
-}
-
-const parseBody = (text: string): unknown => {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return text
-  }
-}
-
-const RETRYABLE_STATUS = new Set([0, 429, 502, 503, 504])
-
-const MAX_RETRY_DELAY_MS = 30_000
-
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
-
-const retryAfterOf = (response: Response): number | null => {
-  const header = response.headers.get('retry-after')
-  return header !== null && /^\d+$/.test(header.trim()) ? Number(header.trim()) * 1000 : null
-}
-
 export class WaltClient {
-  private readonly baseUrl: string
-  private readonly fetchImpl: typeof fetch
-  private readonly tokenProvider: (rejected?: string) => Promise<string>
-  private readonly traceId = hex(16)
-  private readonly baggage: string
-  private readonly retries: number
-  private readonly retryDelayMs: number
+  private readonly transport: Transport
   private readonly maxConcurrent: number
-  private token: string | null = null
-  private pending: Promise<string> | null = null
-  private active = 0
-  private readonly waiting: (() => void)[] = []
 
   constructor(options: WaltClientOptions) {
     if (!options.tokenProvider) {
       throw new WaltAuthError('tokenProvider is required')
     }
-    this.tokenProvider = options.tokenProvider
-    this.baseUrl = options.baseUrl ?? BASE_URL
-    this.fetchImpl = options.fetch ?? fetch
-    this.retries = options.retries ?? 3
-    this.retryDelayMs = options.retryDelayMs ?? 500
+    const retries = options.retries ?? 3
     this.maxConcurrent = options.maxConcurrent ?? 4
     if (!(this.maxConcurrent >= 1)) {
       throw new RangeError(`maxConcurrent must be at least 1, got ${this.maxConcurrent}`)
     }
-    if (!Number.isInteger(this.retries) || this.retries < 0) {
-      throw new RangeError(`retries must be a whole number of at least 0, got ${this.retries}`)
+    if (!Number.isInteger(retries) || retries < 0) {
+      throw new RangeError(`retries must be a whole number of at least 0, got ${retries}`)
     }
-    this.baggage = [
-      'sentry-environment=production',
-      `sentry-release=${SENTRY_RELEASE}`,
-      `sentry-public_key=${SENTRY_PUBLIC_KEY}`,
-      `sentry-trace_id=${this.traceId}`,
-      'sentry-transaction=%2Fwv',
-      'sentry-sampled=false',
-      `sentry-sample_rand=${Math.random()}`,
-      'sentry-sample_rate=0.01'
-    ].join(',')
-  }
-
-  private async ensureToken(rejected?: string): Promise<string> {
-    if (this.token) return this.token
-    this.pending ??= this.mintToken(rejected)
-    try {
-      return await this.pending
-    } finally {
-      this.pending = null
-    }
-  }
-
-  private async mintToken(rejected?: string): Promise<string> {
-    const token = await this.tokenProvider(rejected)
-    this.token = token
-    return token
-  }
-
-  private async acquire(): Promise<void> {
-    if (this.active < this.maxConcurrent) {
-      this.active++
-      return
-    }
-    return new Promise((resolve) => {
-      this.waiting.push(() => {
-        this.active++
-        resolve()
-      })
+    this.transport = new Transport({
+      tokenProvider: options.tokenProvider,
+      baseUrl: options.baseUrl ?? BASE_URL,
+      fetch: options.fetch ?? fetch,
+      retries,
+      retryDelayMs: options.retryDelayMs ?? 500,
+      maxConcurrent: this.maxConcurrent
     })
   }
 
-  private release(): void {
-    this.active--
-    this.waiting.shift()?.()
-  }
-
-  private async send<T>(path: string, body: unknown, rejected?: string): Promise<T> {
-    const token = await this.ensureToken(rejected)
-    const method = body === undefined ? 'GET' : 'POST'
-    const jwt = token.replace(/^Bearer\s+/i, '')
-    const userId = telegramUserIdOf(jwt)
-    const headers: Record<string, string> = {
-      ...BROWSER_HEADERS,
-      accept: 'application/json',
-      authorization: path.startsWith('/emporos/') ? `Bearer ${jwt}` : jwt,
-      referer: `${this.baseUrl}/main?ep=menu${userId === null ? '' : `&tgWebAppUserId=${userId}`}`,
-      baggage: this.baggage,
-      'sentry-trace': `${this.traceId}-${hex(8)}-0`,
-      traceparent: `00-${hex(16)}-${hex(8)}-01`
-    }
-    if (method === 'POST') {
-      headers['content-type'] = 'application/json'
-      headers['origin'] = this.baseUrl
-    }
-    let response: Response
-    try {
-      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-        method,
-        headers,
-        body: method === 'POST' ? JSON.stringify(body) : null
-      })
-    } catch (cause) {
-      throw new WaltRequestError(`${method} ${path} failed (no response)`, 0, null, null, { cause })
-    }
-    if (response.status === 401) {
-      if (rejected !== undefined) throw new WaltAuthError('token rejected after refresh')
-      if (this.token === token) this.token = null
-      return this.send<T>(path, body, token)
-    }
-    let text: string
-    try {
-      text = await response.text()
-    } catch (cause) {
-      throw new WaltRequestError(`${method} ${path} failed (body not received)`, 0, null, null, { cause })
-    }
-    if (!response.ok) {
-      throw new WaltRequestError(
-        `${method} ${path} failed (${response.status})`,
-        response.status,
-        retryAfterOf(response),
-        parseBody(text)
-      )
-    }
-    try {
-      return JSON.parse(text) as T
-    } catch (cause) {
-      throw new WaltRequestError(
-        `${method} ${path} returned a body that is not JSON (${response.status})`,
-        response.status,
-        null,
-        text,
-        { cause }
-      )
-    }
-  }
-
-  private async request<T>(path: string, body: unknown, retries: number): Promise<T> {
-    await this.acquire()
-    try {
-      for (let attempt = 0; ; attempt++) {
-        try {
-          return await this.send<T>(path, body)
-        } catch (error) {
-          const transient = error instanceof WaltRequestError && RETRYABLE_STATUS.has(error.status)
-          if (!transient || attempt >= retries) throw error
-          const backoff = Math.min(MAX_RETRY_DELAY_MS, this.retryDelayMs * 2 ** attempt)
-          await sleep(error.retryAfterMs ?? backoff / 2 + Math.random() * (backoff / 2))
-        }
-      }
-    } finally {
-      this.release()
-    }
-  }
-
-  private get<T>(path: string): Promise<T> {
-    return this.request<T>(path, undefined, this.retries)
-  }
-
   accounts(): Promise<AccountsResponse> {
-    return this.get<AccountsResponse>('/api/v1/accounts/')
+    return this.transport.get<AccountsResponse>('/api/v1/accounts/')
   }
 
   async coins(fiatCurrency: FiatCurrency): Promise<Coin[]> {
-    const { coins } = await this.get<{ coins: Coin[] }>(`/api/v1/coins/list/${fiatCurrency}/`)
+    const { coins } = await this.transport.get<{ coins: Coin[] }>(`/api/v1/coins/list/${fiatCurrency}/`)
     return coins
   }
 
   async localCurrency(): Promise<FiatCurrency> {
-    const { local_currency } = await this.get<{ local_currency: FiatCurrency }>('/api/v1/currencies/local_currency/')
+    const { local_currency } = await this.transport.get<{ local_currency: FiatCurrency }>(
+      '/api/v1/currencies/local_currency/'
+    )
     return local_currency
   }
 
@@ -279,14 +96,14 @@ export class WaltClient {
     if (limit !== undefined) query.set('limit', String(limit))
     if (cursor !== undefined) query.set('cursor', cursor)
     const search = query.size === 0 ? '' : `?${query.toString()}`
-    return this.get<TransactionsPage>(`/api/v1/transactions/${search}`)
+    return this.transport.get<TransactionsPage>(`/api/v1/transactions/${search}`)
   }
 
   accountTransactions(currency: string, limit?: number, cursor?: string): Promise<TransactionsPage> {
     const query = new URLSearchParams({ crypto_currency: currency })
     if (limit !== undefined) query.set('limit', String(limit))
     if (cursor !== undefined) query.set('cursor', cursor)
-    return this.get<TransactionsPage>(`/api/v1/transactions/single-account/?${query.toString()}`)
+    return this.transport.get<TransactionsPage>(`/api/v1/transactions/single-account/?${query.toString()}`)
   }
 
   private async *walk(page: (cursor?: string) => Promise<TransactionsPage>): AsyncGenerator<Transaction> {
@@ -349,21 +166,23 @@ export class WaltClient {
    */
   transactionDetails(id: number | string, gateway?: TransactionGateway | (string & {})): Promise<TransactionDetails> {
     const query = gateway ? `?${new URLSearchParams({ transaction_gateway: gateway }).toString()}` : ''
-    return this.get<TransactionDetails>(`/api/v1/transactions/details/${encodeURIComponent(String(id))}/${query}`)
+    return this.transport.get<TransactionDetails>(
+      `/api/v1/transactions/details/${encodeURIComponent(String(id))}/${query}`
+    )
   }
 
   unconfirmedTransactions<T = unknown>(limit?: number): Promise<{ transactions: T[]; size: number }> {
     const query = limit === undefined ? '' : `?${new URLSearchParams({ limit: String(limit) }).toString()}`
-    return this.get<{ transactions: T[]; size: number }>(`/api/v1/transactions/unconfirmed/${query}`)
+    return this.transport.get<{ transactions: T[]; size: number }>(`/api/v1/transactions/unconfirmed/${query}`)
   }
 
   frozenBalances<T = unknown>(): Promise<T[]> {
-    return this.get<T[]>('/api/v1/accounts/frozen')
+    return this.transport.get<T[]>('/api/v1/accounts/frozen')
   }
 
   /** Every earn campaign. Staked balances are here, not in `accounts()`. */
   earnCampaigns(): Promise<EarnCampaignsResponse> {
-    return this.get<EarnCampaignsResponse>('/earn/public-api/v1/campaigns/')
+    return this.transport.get<EarnCampaignsResponse>('/earn/public-api/v1/campaigns/')
   }
 
   /**
@@ -386,7 +205,7 @@ export class WaltClient {
     if (after?.transfer_request_next_before_datetime != null) {
       query.set('transfer_request_before_datetime', after.transfer_request_next_before_datetime)
     }
-    return this.get<EarnTransactionsPage>(
+    return this.transport.get<EarnTransactionsPage>(
       `/earn/public-api/v1/campaigns/${encodeURIComponent(String(campaignId))}/transactions?${query.toString()}`
     )
   }
@@ -417,11 +236,13 @@ export class WaltClient {
   }
 
   earnRate(from: string, to: string): Promise<EarnRate> {
-    return this.get<EarnRate>(`/earn/public-api/v1/rate/${encodeURIComponent(from)}/${encodeURIComponent(to)}`)
+    return this.transport.get<EarnRate>(
+      `/earn/public-api/v1/rate/${encodeURIComponent(from)}/${encodeURIComponent(to)}`
+    )
   }
 
   pnl(): Promise<PnlResponse> {
-    return this.get<PnlResponse>('/customer-analytics/public-api/v1/pnl/assets/')
+    return this.transport.get<PnlResponse>('/customer-analytics/public-api/v1/pnl/assets/')
   }
 
   /**
@@ -435,7 +256,9 @@ export class WaltClient {
       date_from: dateFrom instanceof Date ? calendarDate(dateFrom) : dateFrom,
       resolution
     })
-    return this.get<PortfolioHistory>(`/customer-analytics/public-api/v1/portfolio/private/?${query.toString()}`)
+    return this.transport.get<PortfolioHistory>(
+      `/customer-analytics/public-api/v1/portfolio/private/?${query.toString()}`
+    )
   }
 
   /**
@@ -448,13 +271,13 @@ export class WaltClient {
     for (const status of options.status ?? []) query.append('status', status)
     if (options.limit !== undefined) query.set('limit', String(options.limit))
     const search = query.size === 0 ? '' : `?${query.toString()}`
-    const { items } = await this.get<{ items: LimitOrder[] }>(`/emporos/public-api/orders/limit${search}`)
+    const { items } = await this.transport.get<{ items: LimitOrder[] }>(`/emporos/public-api/orders/limit${search}`)
     return items
   }
 
   limitOrder(id: string): Promise<LimitOrder> {
     const query = new URLSearchParams({ id })
-    return this.get<LimitOrder>(`/emporos/public-api/orders/limit/by-id?${query.toString()}`)
+    return this.transport.get<LimitOrder>(`/emporos/public-api/orders/limit/by-id?${query.toString()}`)
   }
 
   /**
@@ -474,28 +297,32 @@ export class WaltClient {
     const query = new URLSearchParams({ base_currency: baseCurrency, side, price_limit: String(priceLimit) })
     if ('amount' in size) query.set('amount', String(size.amount))
     else query.set('quantity', String(size.quantity))
-    return this.get<LimitOrderQuote>(`/emporos/public-api/orders/limit/quote?${query.toString()}`)
+    return this.transport.get<LimitOrderQuote>(`/emporos/public-api/orders/limit/quote?${query.toString()}`)
   }
 
   limitOrderBounds(baseCurrency: string): Promise<LimitOrderBounds> {
     const query = new URLSearchParams({ base_currency: baseCurrency })
-    return this.get<LimitOrderBounds>(`/emporos/public-api/orders/limit/bounds?${query.toString()}`)
+    return this.transport.get<LimitOrderBounds>(`/emporos/public-api/orders/limit/bounds?${query.toString()}`)
   }
 
   /** Every currency a limit order can buy. */
   async limitOrderTokens(): Promise<LimitOrderToken[]> {
-    const { tokens } = await this.get<{ tokens: LimitOrderToken[] }>('/emporos/public-api/orders/limit/tokens')
+    const { tokens } = await this.transport.get<{ tokens: LimitOrderToken[] }>(
+      '/emporos/public-api/orders/limit/tokens'
+    )
     return tokens
   }
 
   coinDetails(currency: string, fiatCurrency: FiatCurrency): Promise<CoinDetails> {
-    return this.get<CoinDetails>(
+    return this.transport.get<CoinDetails>(
       `/api/v1/coins/details/${encodeURIComponent(currency)}/${encodeURIComponent(fiatCurrency)}/`
     )
   }
 
   charts(currency: string, fiatCurrency: FiatCurrency): Promise<Charts> {
-    return this.get<Charts>(`/api/v1/charts/${encodeURIComponent(currency)}/${encodeURIComponent(fiatCurrency)}/`)
+    return this.transport.get<Charts>(
+      `/api/v1/charts/${encodeURIComponent(currency)}/${encodeURIComponent(fiatCurrency)}/`
+    )
   }
 
   priceForFiatAtTime(
@@ -510,11 +337,11 @@ export class WaltClient {
       amount: String(amount),
       time: time instanceof Date ? time.toISOString() : String(time)
     })
-    return this.get<PriceAtTime>(`/api/v1/exchange_rates/price_for_fiat_at_time/?${query.toString()}`)
+    return this.transport.get<PriceAtTime>(`/api/v1/exchange_rates/price_for_fiat_at_time/?${query.toString()}`)
   }
 
   availableExchanges(): Promise<AvailableExchanges> {
-    return this.get<AvailableExchanges>('/api/v1/exchange/get-available-exchanges/')
+    return this.transport.get<AvailableExchanges>('/api/v1/exchange/get-available-exchanges/')
   }
 
   /**
@@ -525,11 +352,11 @@ export class WaltClient {
    * @param fromAmount - Amount of `fromCurrency`; `0` returns the rate and limits only.
    */
   quote(fromCurrency: string, toCurrency: string, fromAmount: number): Promise<ExchangeQuote> {
-    return this.request<ExchangeQuote>(
-      '/api/v1/exchange/convert/',
-      { from_amount: fromAmount, from_currency: fromCurrency, to_currency: toCurrency },
-      this.retries
-    )
+    return this.transport.post<ExchangeQuote>('/api/v1/exchange/convert/', {
+      from_amount: fromAmount,
+      from_currency: fromCurrency,
+      to_currency: toCurrency
+    })
   }
 
   /**
@@ -538,7 +365,7 @@ export class WaltClient {
    * @param request - The exchange, in the shape the API takes it.
    */
   createExchange(request: ExchangeRequest): Promise<Exchange> {
-    return this.request<Exchange>('/api/v1/exchange/create_exchange/', request, 0)
+    return this.transport.post<Exchange>('/api/v1/exchange/create_exchange/', request, 0)
   }
 
   /** Non-zero spot balances against the API total, which also counts staked funds. */

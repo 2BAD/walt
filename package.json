@@ -33,18 +33,6 @@
         "types": "./build/index.d.ts",
         "default": "./build/index.js"
       }
-    },
-    "./client": {
-      "import": {
-        "types": "./build/client.d.ts",
-        "default": "./build/client.js"
-      }
-    },
-    "./telegram/auth": {
-      "import": {
-        "types": "./build/telegram/auth.d.ts",
-        "default": "./build/telegram/auth.js"
-      }
     }
   },
   "bin": {

@@ -46,7 +46,8 @@ export type {
   TransactionLeg,
   TransactionsPage
 } from '~/api/transactions.ts'
-export { WaltAuthError, WaltClient, WaltRequestError } from '~/client.ts'
+export { WaltClient } from '~/client.ts'
 export type { Portfolio, PortfolioEntry, WaltClientOptions } from '~/client.ts'
 export { TelegramTokenSource } from '~/telegram/auth.ts'
 export type { TelegramTokenSourceOptions, TokenState, TokenStorage } from '~/telegram/auth.ts'
+export { WaltAuthError, WaltRequestError } from '~/transport.ts'
