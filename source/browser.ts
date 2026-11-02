@@ -16,3 +16,6 @@ export const BROWSER_HEADERS = {
   'user-agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36'
 }
+
+export const SENTRY_RELEASE = '10.0.84666'
+export const SENTRY_PUBLIC_KEY = '544a92e441a24f17aa6b08e34e728ed2'

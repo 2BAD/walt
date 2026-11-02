@@ -5,12 +5,9 @@ import type { EarnCampaignsResponse, EarnRate, EarnTransaction, EarnTransactions
 import type { AvailableExchanges, Exchange, ExchangeQuote, ExchangeRequest } from '~/api/exchange.ts'
 import type { LimitOrder, LimitOrderBounds, LimitOrderQuote, LimitOrderToken } from '~/api/limit-orders.ts'
 import type { Transaction, TransactionDetails, TransactionGateway, TransactionsPage } from '~/api/transactions.ts'
-import { BROWSER_HEADERS } from '~/browser.ts'
+import { BROWSER_HEADERS, SENTRY_PUBLIC_KEY, SENTRY_RELEASE } from '~/browser.ts'
 
 const BASE_URL = 'https://walletbot.me'
-
-const SENTRY_RELEASE = '10.0.84666'
-const SENTRY_PUBLIC_KEY = '544a92e441a24f17aa6b08e34e728ed2'
 
 const hex = (bytes: number): string => randomBytes(bytes).toString('hex')
 
