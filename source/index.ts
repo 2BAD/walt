@@ -1,15 +1,27 @@
-export { normalizeTransaction, WaltAuthError, WaltClient, WaltRequestError } from '~/client.ts'
 export type {
   Account,
   AccountAction,
   AccountActions,
   AccountAddress,
   AccountsResponse,
-  AvailableExchanges,
   ChartPoint,
   Charts,
   Coin,
   CoinDetails,
+  FiatCurrency,
+  PriceAtTime,
+  TradingHoursPeriod,
+  TradingHoursState
+} from '~/api/accounts.ts'
+export type {
+  PnlPosition,
+  PnlResponse,
+  PnlTotals,
+  PortfolioFlows,
+  PortfolioHistory,
+  PortfolioPeriod
+} from '~/api/analytics.ts'
+export type {
   EarnAccessPolicy,
   EarnAccount,
   EarnAmount,
@@ -21,33 +33,20 @@ export type {
   EarnPayoutPool,
   EarnRate,
   EarnTransaction,
-  EarnTransactionsPage,
-  Exchange,
-  ExchangeQuote,
-  ExchangeRequest,
-  FiatCurrency,
-  LimitOrder,
-  LimitOrderBounds,
-  LimitOrderQuote,
-  LimitOrderToken,
+  EarnTransactionsPage
+} from '~/api/earn.ts'
+export type { AvailableExchanges, Exchange, ExchangeQuote, ExchangeRequest } from '~/api/exchange.ts'
+export type { LimitOrder, LimitOrderBounds, LimitOrderQuote, LimitOrderToken } from '~/api/limit-orders.ts'
+export { normalizeTransaction } from '~/api/transactions.ts'
+export type {
   NormalizedTransaction,
-  PnlPosition,
-  PnlResponse,
-  PnlTotals,
-  Portfolio,
-  PortfolioEntry,
-  PortfolioFlows,
-  PortfolioHistory,
-  PortfolioPeriod,
-  PriceAtTime,
-  TradingHoursPeriod,
-  TradingHoursState,
   Transaction,
   TransactionDetails,
   TransactionGateway,
   TransactionLeg,
-  TransactionsPage,
-  WaltClientOptions
-} from '~/client.ts'
+  TransactionsPage
+} from '~/api/transactions.ts'
+export { WaltAuthError, WaltClient, WaltRequestError } from '~/client.ts'
+export type { Portfolio, PortfolioEntry, WaltClientOptions } from '~/client.ts'
 export { TelegramTokenSource } from '~/telegram/auth.ts'
 export type { TelegramTokenSourceOptions, TokenState, TokenStorage } from '~/telegram/auth.ts'
