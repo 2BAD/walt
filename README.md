@@ -7,8 +7,11 @@
 
 Client for Walt, the crypto app in Telegram (ex @wallet).
 
-- Balances, staking, prices, charts and transaction history
-- Exchange quotes and exchanges between assets
+> [!WARNING]
+> This is an unofficial client. It is not affiliated with, endorsed by or supported by Walt or Telegram. It uses a
+> private, undocumented API. Using it likely violates the Walt and Telegram terms of service and may get your account
+> restricted or banned. The software is provided as is, without warranty of any kind. The authors accept no liability
+> for any loss of funds, account access or data, or any other damage arising from its use. Use it at your own risk.
 
 ## Install
 
