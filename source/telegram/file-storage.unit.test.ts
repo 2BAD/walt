@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TokenState } from '~/telegram/auth.ts'
 import { defaultTokenPath, fileTokenStorage } from '~/telegram/file-storage.ts'
@@ -19,11 +19,13 @@ describe('defaultTokenPath', () => {
   })
 
   it('puts one file per session under XDG_CACHE_HOME', () => {
-    expect.assertions(3)
+    expect.assertions(4)
 
-    vi.stubEnv('XDG_CACHE_HOME', '/cache')
+    const cacheHome = join(tmpdir(), 'cache')
+    vi.stubEnv('XDG_CACHE_HOME', cacheHome)
 
-    expect(defaultTokenPath('session-a')).toMatch(/^\/cache\/walt\/[0-9a-f]{16}\.json$/)
+    expect(dirname(defaultTokenPath('session-a'))).toBe(join(cacheHome, 'walt'))
+    expect(basename(defaultTokenPath('session-a'))).toMatch(/^[0-9a-f]{16}\.json$/)
     expect(defaultTokenPath('session-a')).toBe(defaultTokenPath('session-a'))
     expect(defaultTokenPath('session-a')).not.toBe(defaultTokenPath('session-b'))
   })
@@ -54,14 +56,21 @@ describe('fileTokenStorage', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
-  it('saves and loads the token through a private file', async () => {
-    expect.assertions(3)
+  it('saves and loads the token', async () => {
+    expect.assertions(1)
 
-    const path = join(dir, 'walt', 'token.json')
-    const storage = fileTokenStorage(path)
+    const storage = fileTokenStorage(join(dir, 'walt', 'token.json'))
     await storage.save(state)
 
     expect(await storage.load()).toStrictEqual(state)
+  })
+
+  it.skipIf(process.platform === 'win32')('keeps the token file private', async () => {
+    expect.assertions(2)
+
+    const path = join(dir, 'walt', 'token.json')
+    await fileTokenStorage(path).save(state)
+
     expect((await stat(path)).mode & 0o777).toBe(0o600)
     expect((await stat(join(dir, 'walt'))).mode & 0o777).toBe(0o700)
   })
