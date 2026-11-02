@@ -8,6 +8,10 @@ const rl = createInterface({ input: stdin, output: stdout })
 const ask = (question: string) => rl.question(question)
 
 const apiId = Number(process.env['TG_API_ID'] || (await ask('API id (from https://my.telegram.org): ')))
+if (!Number.isSafeInteger(apiId) || apiId <= 0) {
+  console.error('The API id must be the number shown at https://my.telegram.org')
+  process.exit(1)
+}
 const apiHash = process.env['TG_API_HASH'] || (await ask('API hash: '))
 
 const client = new TelegramClient(new StringSession(''), apiId, apiHash, { connectionRetries: 3 })

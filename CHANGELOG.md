@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-02
+
+### Fixed
+
+- Fixed `telegram-login` failing with a misleading error when the API id is not a number
+
 ## [1.0.0] - 2026-11-02
 
 ### Highlights
