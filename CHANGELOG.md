@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-07
+
+### Highlights
+
+- **Command line:** the read-only `walt` command shows balances, history, prices, quotes, orders, perps and earn.
+- **Perpetual futures:** read contracts, open and closed positions, and orders.
+
 ### Added
 
 - Added `balances()`, which includes USDT held by open limit orders
