@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import './quiet-localstorage.ts'
 import { readFileSync } from 'node:fs'
 import { stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline/promises'
