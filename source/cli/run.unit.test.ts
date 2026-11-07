@@ -202,20 +202,20 @@ describe('price', () => {
 })
 
 describe('quote', () => {
-  it('shows what the exchange would give and its price', async () => {
+  const converted = (from_currency: string, from_amount: number, to_currency: string, to_amount: number) => ({
+    from_amount,
+    from_currency,
+    to_amount,
+    to_currency,
+    rate: to_amount / from_amount,
+    min_amount: 1,
+    max_amount: 50000
+  })
+
+  it('shows what a purchase gives and its price in the currency paid', async () => {
     expect.assertions(2)
 
-    const { client, fetchImpl } = clientFor({
-      '/api/v1/exchange/convert/': {
-        from_amount: 100,
-        from_currency: 'USDT',
-        to_amount: 0.001,
-        to_currency: 'BTC',
-        rate: 0.00001,
-        min_amount: 1,
-        max_amount: 50000
-      }
-    })
+    const { client, fetchImpl } = clientFor({ '/api/v1/exchange/convert/': converted('USDT', 100, 'BTC', 0.001) })
     const output = await run(client, 'quote', ['USDT', 'BTC', '100'])
 
     expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toStrictEqual({
@@ -223,14 +223,64 @@ describe('quote', () => {
       from_currency: 'USDT',
       to_currency: 'BTC'
     })
-    expect(output.split('\n')[1]).toBe('100 USDT  0.001 BTC  100000.00 USDT/BTC')
+    expect(output.split('\n')[1]).toBe('100 USDT  0.001 BTC  100000 USDT/BTC')
   })
 
-  it.each([[[]], [['USDT', 'BTC']], [['USDT', 'BTC', '-1']]])('rejects %o', async (args) => {
+  it('prices a sale in USDT per unit sold', async () => {
     expect.assertions(1)
 
-    await expect(run(clientFor({}).client, 'quote', args)).rejects.toThrow(UsageError)
+    const { client } = clientFor({ '/api/v1/exchange/convert/': converted('BTC', 0.002, 'USDT', 200) })
+
+    expect((await run(client, 'quote', ['BTC', 'USDT', '0.002'])).split('\n')[1]).toBe(
+      '0.002 BTC  200 USDT  100000 USDT/BTC'
+    )
   })
+
+  it('cuts decimals the api rejects and says so', async () => {
+    expect.assertions(3)
+
+    const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
+      const { from_amount } = JSON.parse(String(init?.body)) as { from_amount: number }
+      return from_amount === 6.084524
+        ? jsonResponse(converted('TQQQx', 6.084524, 'USDT', 315.66))
+        : jsonResponse({ code: 'invalid_amount' }, 400)
+    })
+    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
+    const lines = (await run(client, 'quote', ['TQQQx', 'USDT', '6.08452414'])).split('\n')
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(lines[1]).toBe('6.084524 TQQQx  315.66 USDT  51.879161 USDT/TQQQx')
+    expect(lines[2]).toBe('amount cut to 6.084524 TQQQx, the most decimals it accepts')
+  })
+
+  it('gives up when no precision is accepted', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ code: 'invalid_amount' }, 400))
+    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
+
+    await expect(run(client, 'quote', ['TQQQx', 'USDT', '1.5'])).rejects.toThrow('failed (400)')
+    expect(fetchImpl.mock.calls.map((call) => JSON.parse(String(call[1]?.body)).from_amount)).toStrictEqual([1.5, 1])
+  })
+
+  it('does not retry other errors', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ code: 'market_order_max_limit_error' }, 400))
+    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
+
+    await expect(run(client, 'quote', ['USDT', 'BTC', '9999999.5'])).rejects.toThrow('failed (400)')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([[[]], [['USDT', 'BTC']], [['USDT', 'BTC', '-1']], [['USDT', 'BTC', '1e3']], [['USDT', 'BTC', '0']]])(
+    'rejects %o',
+    async (args) => {
+      expect.assertions(1)
+
+      await expect(run(clientFor({}).client, 'quote', args)).rejects.toThrow(UsageError)
+    }
+  )
 })
 
 describe('orders', () => {

@@ -1,5 +1,7 @@
 import type { FiatCurrency } from '~/api/accounts.ts'
+import type { ExchangeQuote } from '~/api/exchange.ts'
 import type { WaltClient } from '~/client.ts'
+import { WaltRequestError } from '~/transport.ts'
 
 type Column = { key: string; title: string; numeric?: boolean }
 type Row = Record<string, string>
@@ -181,13 +183,53 @@ const price = async (client: WaltClient, symbols: string[], fiat: string): Promi
   }
 }
 
+const quoteSizes = (amount: string): string[] => {
+  const [whole = '', fraction = ''] = amount.split('.')
+  const sizes = [
+    amount,
+    ...[6, 4, 2, 0]
+      .filter((places) => places < fraction.length)
+      .map((places) => (places === 0 ? whole : `${whole}.${fraction.slice(0, places)}`))
+  ]
+  return [...new Set(sizes)].filter((size) => Number(size) > 0)
+}
+
 const quote = async (client: WaltClient, args: string[]): Promise<Report> => {
   const [from, to, amount] = args
-  const size = Number(amount)
-  if (!from || !to || !(size > 0)) {
+  if (!from || !to || amount === undefined || !/^\d+(\.\d+)?$/.test(amount) || !(Number(amount) > 0)) {
     throw new UsageError('usage: walt quote FROM TO AMOUNT, such as `walt quote USDT BTC 100`')
   }
-  const result = await client.quote(from, to, size)
+  let result: ExchangeQuote | undefined
+  let size = amount
+  let rejection: unknown
+  for (const candidate of quoteSizes(amount)) {
+    try {
+      result = await client.quote(from, to, Number(candidate))
+      size = candidate
+      break
+    } catch (error) {
+      if (
+        !(error instanceof WaltRequestError) ||
+        (error.body as { code?: unknown } | null)?.code !== 'invalid_amount'
+      ) {
+        throw error
+      }
+      rejection = error
+    }
+  }
+  if (result === undefined) throw rejection
+  const sale = result.to_currency === 'USDT' && result.from_currency !== 'USDT'
+  const price =
+    result.from_amount <= 0 || result.to_amount <= 0
+      ? '-'
+      : sale
+        ? `${significant(result.to_amount / result.from_amount)} USDT/${result.from_currency}`
+        : `${significant(result.from_amount / result.to_amount)} ${result.from_currency}/${result.to_currency}`
+  const footer = [
+    `order size ${result.min_amount} to ${result.max_amount} ${from}`,
+    'fees included, nothing was exchanged'
+  ]
+  if (size !== amount) footer.unshift(`amount cut to ${size} ${from}, the most decimals it accepts`)
   return {
     columns: [
       { key: 'pay', title: 'PAY', numeric: true },
@@ -198,10 +240,10 @@ const quote = async (client: WaltClient, args: string[]): Promise<Report> => {
       {
         pay: `${result.from_amount} ${result.from_currency}`,
         receive: `${result.to_amount} ${result.to_currency}`,
-        price: result.to_amount > 0 ? `${(result.from_amount / result.to_amount).toPrecision(8)} ${from}/${to}` : '-'
+        price
       }
     ],
-    footer: [`order size ${result.min_amount} to ${result.max_amount} ${from}`, 'fees included, nothing was exchanged']
+    footer
   }
 }
 
