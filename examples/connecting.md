@@ -19,7 +19,7 @@ Get `apiId` and `apiHash` from [my.telegram.org](https://my.telegram.org).
 Sign in once to get a session string.
 
 ```sh
-npx -p @2bad/walt telegram-login
+npx @2bad/walt login
 ```
 
 The session string grants full access to the account. Keep it out of version control.

@@ -42,6 +42,7 @@ await source.disconnect()
 - [Exchange](examples/exchange.md): available pairs, quotes, exchanges and limit orders
 - [Transactions](examples/transactions.md): history, details and reading a transaction
 - [Errors](examples/errors.md): `WaltRequestError`, `WaltAuthError` and what is retried
+- [Command line](examples/cli.md): the read-only `walt` command for balances, history, prices and orders
 
 A runnable script is in [examples/portfolio.ts](examples/portfolio.ts).
 

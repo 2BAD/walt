@@ -4,7 +4,7 @@ const session = process.env['TG_SESSION']
 const apiId = Number(process.env['TG_API_ID'])
 const apiHash = process.env['TG_API_HASH']
 if (!session || !apiId || !apiHash) {
-  console.error('Set TG_SESSION, TG_API_ID, TG_API_HASH (run `npx -p @2bad/walt telegram-login` once for the session).')
+  console.error('Set TG_SESSION, TG_API_ID, TG_API_HASH (run `npx @2bad/walt login` once for the session).')
   process.exit(1)
 }
 

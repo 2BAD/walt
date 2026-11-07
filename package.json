@@ -36,7 +36,7 @@
     }
   },
   "bin": {
-    "telegram-login": "./build/bin/login.js"
+    "walt": "./build/bin/walt.js"
   },
   "files": [
     "build"
@@ -50,7 +50,7 @@
     "fix": "run-p fix:**",
     "fix:code": "oxlint --fix ./source",
     "fix:format": "oxfmt ./source ./examples",
-    "telegram:login": "node --env-file-if-exists=.env source/bin/login.ts",
+    "telegram:login": "run-s build && node --env-file-if-exists=.env build/bin/walt.js login",
     "example": "run-s build && node --env-file-if-exists=.env examples/portfolio.ts",
     "prepublishOnly": "run-s build",
     "preversion": "run-s check test build",

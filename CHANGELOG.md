@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `balances()`, which includes USDT held by open limit orders
 - Added `perpContracts()`, `perpSystemStatus()`, `perpPositions()` and `perpOrders()` to read perpetual futures
 - Added `candles()` to fetch price candles for several assets in one request
+- Added the read-only `walt` command for balances, history, transactions, prices, quotes, orders, perps and earn
+
+### Removed
+
+- **Breaking:** Removed the `telegram-login` command. Use `walt login` instead.
 
 ## [1.0.1] - 2026-11-02
 
