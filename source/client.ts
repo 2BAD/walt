@@ -1,8 +1,18 @@
 import type { AccountsResponse, Charts, Coin, CoinDetails, FiatCurrency, PriceAtTime } from '~/api/accounts.ts'
 import type { PnlResponse, PortfolioHistory } from '~/api/analytics.ts'
+import type { Balances } from '~/api/balances.ts'
+import type { CandleRequest, CandleSeries } from '~/api/candles.ts'
 import type { EarnCampaignsResponse, EarnRate, EarnTransaction, EarnTransactionsPage } from '~/api/earn.ts'
 import type { AvailableExchanges, Exchange, ExchangeQuote, ExchangeRequest } from '~/api/exchange.ts'
 import type { LimitOrder, LimitOrderBounds, LimitOrderQuote, LimitOrderToken } from '~/api/limit-orders.ts'
+import type {
+  PerpContract,
+  PerpOrdersPage,
+  PerpOrderStatus,
+  PerpPosition,
+  PerpPositionStatus,
+  PerpSystemStatus
+} from '~/api/perps.ts'
 import type { Transaction, TransactionDetails, TransactionGateway, TransactionsPage } from '~/api/transactions.ts'
 import { Transport, WaltAuthError } from '~/transport.ts'
 
@@ -77,6 +87,19 @@ export class WaltClient {
 
   accounts(): Promise<AccountsResponse> {
     return this.transport.get<AccountsResponse>('/api/v1/accounts/')
+  }
+
+  /**
+   * Every balance with its account type, including USDT held by open limit orders, which `accounts()` omits.
+   *
+   * @param fiatCurrency - Currency of the fiat amounts and the overall total.
+   */
+  async balances(fiatCurrency: FiatCurrency): Promise<Balances> {
+    const query = new URLSearchParams({ fiat_currency: fiatCurrency })
+    const { data } = await this.transport.get<{ data: Balances }>(
+      `/portmone/public-api/v1/user/accounts?${query.toString()}`
+    )
+    return data
   }
 
   async coins(fiatCurrency: FiatCurrency): Promise<Coin[]> {
@@ -311,6 +334,66 @@ export class WaltClient {
       '/emporos/public-api/orders/limit/tokens'
     )
     return tokens
+  }
+
+  /** @param contractId - Only this contract. */
+  async perpContracts(contractId?: number): Promise<PerpContract[]> {
+    const query =
+      contractId === undefined ? '' : `?${new URLSearchParams({ contract_id: String(contractId) }).toString()}`
+    const { contracts } = await this.transport.get<{ contracts: PerpContract[] }>(
+      `/perps/public-api/v1/contracts/${query}`
+    )
+    return contracts
+  }
+
+  perpSystemStatus(): Promise<PerpSystemStatus> {
+    return this.transport.get<PerpSystemStatus>('/perps/public-api/v1/system-status/')
+  }
+
+  /**
+   * @param options - Filters, all optional.
+   * @param options.statuses - Only positions in these states. Without it, closed positions are included.
+   * @param options.contractId - Only this contract.
+   */
+  async perpPositions(options: { statuses?: PerpPositionStatus[]; contractId?: number } = {}): Promise<PerpPosition[]> {
+    const query = new URLSearchParams()
+    if (options.contractId !== undefined) query.set('contract_id', String(options.contractId))
+    for (const status of options.statuses ?? []) query.append('statuses', status)
+    const search = query.size === 0 ? '' : `?${query.toString()}`
+    const { positions } = await this.transport.get<{ positions: PerpPosition[] }>(
+      `/perps/public-api/v1/positions/${search}`
+    )
+    return positions
+  }
+
+  /**
+   * @param options - Filters, all optional.
+   * @param options.contractId - Only this contract.
+   * @param options.statuses - Only orders in these states.
+   * @param options.limit - Most orders to return.
+   */
+  perpOrders(
+    options: { contractId?: number; statuses?: PerpOrderStatus[]; limit?: number } = {}
+  ): Promise<PerpOrdersPage> {
+    const query = new URLSearchParams()
+    if (options.contractId !== undefined) query.set('contract_id', String(options.contractId))
+    if (options.limit !== undefined) query.set('limit', String(options.limit))
+    for (const status of options.statuses ?? []) query.append('statuses', status)
+    const search = query.size === 0 ? '' : `?${query.toString()}`
+    return this.transport.get<PerpOrdersPage>(`/perps/public-api/v2/orders/${search}`)
+  }
+
+  /**
+   * OHLCV candles for several tickers in one request.
+   *
+   * @param requests - One per series wanted.
+   */
+  async candles(requests: CandleRequest[]): Promise<CandleSeries[]> {
+    const { responses } = await this.transport.post<{ responses: CandleSeries[] }>(
+      '/kandelabr/public-api/v1/candles/batch',
+      { requests }
+    )
+    return responses
   }
 
   coinDetails(currency: string, fiatCurrency: FiatCurrency): Promise<CoinDetails> {

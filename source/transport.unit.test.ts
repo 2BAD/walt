@@ -52,16 +52,22 @@ describe('transport headers', () => {
     expect(authHeaderOf(fetchImpl)).toBe('jwt.token.value')
   })
 
-  it('sends a bearer token to the order service and a raw one elsewhere', async () => {
-    expect.assertions(2)
+  it('sends a bearer token to the order, balance and candle services and a raw one elsewhere', async () => {
+    expect.assertions(5)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}))
     const transport = makeTransport(fetchImpl, { tokenProvider: async () => 'Bearer jwt.token.value' })
     await transport.get('/emporos/public-api/orders/limit')
+    await transport.get('/portmone/public-api/v1/user/accounts')
+    await transport.post('/kandelabr/public-api/v1/candles/batch', {})
     await transport.get(ACCOUNTS)
+    await transport.get('/perps/public-api/v1/contracts/')
 
     expect(authHeaderOf(fetchImpl, 0)).toBe('Bearer jwt.token.value')
-    expect(authHeaderOf(fetchImpl, 1)).toBe('jwt.token.value')
+    expect(authHeaderOf(fetchImpl, 1)).toBe('Bearer jwt.token.value')
+    expect(authHeaderOf(fetchImpl, 2)).toBe('Bearer jwt.token.value')
+    expect(authHeaderOf(fetchImpl, 3)).toBe('jwt.token.value')
+    expect(authHeaderOf(fetchImpl, 4)).toBe('jwt.token.value')
   })
 
   it('sends the browser headers the web app sends', async () => {

@@ -568,6 +568,97 @@ describe('waltClient limit orders', () => {
   })
 })
 
+describe('waltClient balances', () => {
+  it('unwraps the data envelope', async () => {
+    expect.assertions(2)
+
+    const data = { accounts: [{ account_type: 'HOLD_LIMIT', currency: 'USDT' }], fiat_currency: 'USD' }
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ status: 'SUCCESS', data }))
+
+    expect(await makeClient(fetchImpl).balances('USD')).toStrictEqual(data)
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/portmone/public-api/v1/user/accounts?fiat_currency=USD'
+    )
+  })
+})
+
+describe('waltClient perps', () => {
+  it('lists every contract', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ contracts: [{ contract_id: 1 }] }))
+
+    expect(await makeClient(fetchImpl).perpContracts()).toStrictEqual([{ contract_id: 1 }])
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/perps/public-api/v1/contracts/')
+  })
+
+  it('asks for one contract', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ contracts: [] }))
+    await makeClient(fetchImpl).perpContracts(111)
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/perps/public-api/v1/contracts/?contract_id=111')
+  })
+
+  it('fetches the system status', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}))
+    await makeClient(fetchImpl).perpSystemStatus()
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/perps/public-api/v1/system-status/')
+  })
+
+  it('lists positions filtered by contract and status', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ positions: [] }))
+
+    expect(await makeClient(fetchImpl).perpPositions({ statuses: ['open'], contractId: 111 })).toStrictEqual([])
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/perps/public-api/v1/positions/?contract_id=111&statuses=open'
+    )
+  })
+
+  it('lists positions without filters', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ positions: [] }))
+    await makeClient(fetchImpl).perpPositions()
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/perps/public-api/v1/positions/')
+  })
+
+  it('lists orders with repeated statuses', async () => {
+    expect.assertions(2)
+
+    const page = { orders: [], next_cursor: null, last_sort_ts: null }
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(page))
+
+    expect(
+      await makeClient(fetchImpl).perpOrders({ contractId: 111, limit: 3, statuses: ['pending', 'filled'] })
+    ).toStrictEqual(page)
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/perps/public-api/v2/orders/?contract_id=111&limit=3&statuses=pending&statuses=filled'
+    )
+  })
+})
+
+describe('waltClient candles', () => {
+  it('posts the batch and returns the series', async () => {
+    expect.assertions(3)
+
+    const series = [{ ticker: 'BTC/USD/SPOT', resolution: '5m', start_ts: 1, candles: [] }]
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ responses: series }))
+    const requests = [{ ticker: 'BTC/USD/SPOT', resolution: '5m', limit: 6 }]
+
+    expect(await makeClient(fetchImpl).candles(requests)).toStrictEqual(series)
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/kandelabr/public-api/v1/candles/batch')
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toStrictEqual({ requests })
+  })
+})
+
 describe('waltClient detailsFor', () => {
   const rows = (count: number) =>
     Array.from({ length: count }, (_, index) => ({ id: 10000000000001 + index }) as Transaction)

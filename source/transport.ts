@@ -20,6 +20,7 @@ export class WaltRequestError extends Error {
 }
 
 const RETRYABLE_STATUS = new Set([0, 429, 502, 503, 504])
+const BEARER_SERVICES = ['/emporos/', '/portmone/', '/kandelabr/']
 
 const MAX_RETRY_DELAY_MS = 30_000
 
@@ -143,7 +144,7 @@ export class Transport {
     const headers: Record<string, string> = {
       ...BROWSER_HEADERS,
       accept: 'application/json',
-      authorization: path.startsWith('/emporos/') ? `Bearer ${jwt}` : jwt,
+      authorization: BEARER_SERVICES.some((prefix) => path.startsWith(prefix)) ? `Bearer ${jwt}` : jwt,
       referer: `${this.baseUrl}/main?ep=menu${userId === null ? '' : `&tgWebAppUserId=${userId}`}`,
       baggage: this.baggage,
       'sentry-trace': `${this.traceId}-${hex(8)}-0`,

@@ -21,6 +21,8 @@ export type {
   PortfolioHistory,
   PortfolioPeriod
 } from '~/api/analytics.ts'
+export type { Balance, Balances } from '~/api/balances.ts'
+export type { Candle, CandleRequest, CandleSeries } from '~/api/candles.ts'
 export type {
   EarnAccessPolicy,
   EarnAccount,
@@ -37,6 +39,15 @@ export type {
 } from '~/api/earn.ts'
 export type { AvailableExchanges, Exchange, ExchangeQuote, ExchangeRequest } from '~/api/exchange.ts'
 export type { LimitOrder, LimitOrderBounds, LimitOrderQuote, LimitOrderToken } from '~/api/limit-orders.ts'
+export type {
+  PerpContract,
+  PerpOrder,
+  PerpOrdersPage,
+  PerpOrderStatus,
+  PerpPosition,
+  PerpPositionStatus,
+  PerpSystemStatus
+} from '~/api/perps.ts'
 export { normalizeTransaction } from '~/api/transactions.ts'
 export type {
   NormalizedTransaction,

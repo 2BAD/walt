@@ -60,6 +60,7 @@ new WaltClient(options: WaltClientOptions)
 type WaltClient = {
   accounts(): Promise<AccountsResponse>
   portfolio(): Promise<Portfolio>
+  balances(fiatCurrency: FiatCurrency): Promise<Balances>
   pnl(): Promise<PnlResponse>
   portfolioHistory(dateFrom: Date | string, resolution: '1d' | '1m'): Promise<PortfolioHistory>
   frozenBalances<T = unknown>(): Promise<T[]>
@@ -74,6 +75,7 @@ type WaltClient = {
   charts(currency: string, fiatCurrency: FiatCurrency): Promise<Charts>
   priceForFiatAtTime(crypto: string, fiat: FiatCurrency, amount: number | string, time: Date | string | number): Promise<PriceAtTime>
   localCurrency(): Promise<FiatCurrency>
+  candles(requests: CandleRequest[]): Promise<CandleSeries[]>
 
   availableExchanges(): Promise<AvailableExchanges>
   quote(fromCurrency: string, toCurrency: string, fromAmount: number): Promise<ExchangeQuote>
@@ -84,6 +86,11 @@ type WaltClient = {
   limitOrderQuote(baseCurrency: string, side: 'BUY' | 'SELL', priceLimit: number | string, size: { amount: number | string } | { quantity: number | string }): Promise<LimitOrderQuote>
   limitOrderBounds(baseCurrency: string): Promise<LimitOrderBounds>
   limitOrderTokens(): Promise<LimitOrderToken[]>
+
+  perpContracts(contractId?: number): Promise<PerpContract[]>
+  perpSystemStatus(): Promise<PerpSystemStatus>
+  perpPositions(options?: { statuses?: PerpPositionStatus[]; contractId?: number }): Promise<PerpPosition[]>
+  perpOrders(options?: { contractId?: number; statuses?: PerpOrderStatus[]; limit?: number }): Promise<PerpOrdersPage>
 
   transactions(limit?: number, cursor?: string): Promise<TransactionsPage>
   accountTransactions(currency: string, limit?: number, cursor?: string): Promise<TransactionsPage>
