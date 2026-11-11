@@ -1,8 +1,9 @@
 export type CandleRequest = {
   /** `<currency>/USD/SPOT`, or `<base>/USD/PERP_TRADE` for a perps contract. */
   ticker: string
-  /** Seen: `5m`, `15m`. */
+  /** Accepted: `1m`, `5m`, `15m`, `1h`, `4h`, `1d`, `1w`, `1mo`. */
   resolution: string
+  /** At least 1. The whole batch may ask for 3000 candles at most. */
   limit: number
 }
 
