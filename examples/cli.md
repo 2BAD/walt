@@ -34,7 +34,7 @@ export TG_SESSION=SESSION_STRING
 ## Commands
 
 ```sh
-walt balances                         # spot, staked and held by limit orders
+walt balances                         # spot, staked and held by limit orders, --all adds dust
 walt history                          # balance and P/L per day, last 30 days
 walt history --monthly --from 2026-01-01
 walt transactions --asset TON --limit 50

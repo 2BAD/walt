@@ -34,6 +34,7 @@ describe('balances', () => {
           account('REGULAR', 'TON', '10.000000000000000001', '100.00'),
           account('HOLD_LIMIT', 'USDT', '200', '200.00'),
           account('EARN_V2', 'SOL', '1', '100.00'),
+          account('REGULAR', 'NOT', '0.00000432', '0.00'),
           account('REGULAR', 'ETH', '0', '0')
         ]
       }
@@ -51,9 +52,20 @@ describe('balances', () => {
         'USDT   orders     200     200.00  50.0%',
         'TON    spot        10     100.00  25.0%',
         'SOL    earn         1     100.00  25.0%',
-        'total 400.00 USD'
+        'total 400.00 USD',
+        '1 worth less than 0.01 not shown, --all lists them'
       ].join('\n')
     )
+  })
+
+  it('lists balances worth less than 0.01 with --all', async () => {
+    expect.assertions(1)
+
+    const rows = JSON.parse(await run(clientFor(routes).client, 'balances', [], { all: true, json: true })) as {
+      asset: string
+    }[]
+
+    expect(rows.map((row) => row.asset)).toStrictEqual(['USDT', 'TON', 'SOL', 'NOT'])
   })
 
   it('prints rows as json', async () => {
@@ -136,7 +148,7 @@ describe('transactions', () => {
         created_at: '2026-01-02T03:04:05Z',
         type: 'deposit',
         gateway: 'p2p_order',
-        amount: '100',
+        amount: '100.000000',
         currency: 'USDT',
         status: 'success'
       }
@@ -304,7 +316,7 @@ describe('orders', () => {
 
     expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('status=OPEN&status=CANCELLING&limit=100')
     expect(lines[1]).toBe('2026-01-02 03:04  BTC    BUY   50000     0.001  50 USDT  0.3  OPEN')
-    expect(lines[2]).toBe('50.00 held by open orders')
+    expect(lines[2]).toBe('50.00 USDT held by open orders')
   })
 
   it('lists every order with --all', async () => {
@@ -323,9 +335,9 @@ describe('perps', () => {
     side: 'long',
     leverage: 10,
     value_base: '0.01',
-    avg_entry_price: '50000',
+    avg_entry_price: '50123.45678345864661654135338',
     margin_quote: '50',
-    liquidation_price: '45000',
+    liquidation_price: '45000.123456789',
     created_at: '2026-01-02T03:04:05Z',
     updated_at: '2026-01-03T03:04:05Z',
     valuation: { mark_price: '51000', unrealized_pnl_quote: '10' }
@@ -338,7 +350,10 @@ describe('perps', () => {
     const lines = (await run(client, 'perps', [])).split('\n')
 
     expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('statuses=open')
-    expect(lines[0]).toBe('CONTRACT  SIDE  LEV  SIZE  ENTRY  MARGIN   MARK  LIQUIDATION  UNREALISED')
+    expect(lines).toStrictEqual([
+      'CONTRACT  SIDE  LEV  SIZE      ENTRY  MARGIN   MARK  LIQUIDATION  UNREALISED',
+      'BTC-USDC  long  10x  0.01  50123.457   50.00  51000    45000.123       10.00'
+    ])
   })
 
   it('shows closed positions with their dates and no valuation', async () => {
@@ -348,7 +363,7 @@ describe('perps', () => {
     const lines = (await run(client, 'perps', [], { closed: true })).split('\n')
 
     expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('statuses=closed')
-    expect(lines[1]).toBe('BTC-USDC  long  10x  0.01  50000   50.00  2026-01-02 03:04  2026-01-03 03:04')
+    expect(lines[1]).toBe('BTC-USDC  long  10x  0.01  50123.457   50.00  2026-01-02 03:04  2026-01-03 03:04')
   })
 
   it('says when there is nothing to show', async () => {

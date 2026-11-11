@@ -21,7 +21,8 @@ export type CliOptions = {
 export class UsageError extends Error {}
 
 export const COMMANDS = `Commands:
-  balances                  every asset: spot, staked and held by limit orders
+  balances [--all]          every asset: spot, staked and held by limit orders,
+                            and with --all the ones worth less than 0.01
   history [--monthly]       balance, deposits, withdrawals and P/L per day or month
           [--from DATE]     start date, YYYY-MM-DD (default: 30 days or 12 months back)
   transactions              latest transactions
@@ -46,7 +47,7 @@ const trimmed = (value: string | null | undefined): string => {
   return String(Number(parsed.toFixed(8)))
 }
 
-const significant = (value: number): string => String(Number(value.toPrecision(8)))
+const significant = (value: number): string => (Number.isFinite(value) ? String(Number(value.toPrecision(8))) : '-')
 
 const percent = (value: number): string =>
   Number.isFinite(value) ? `${value >= 0 ? '+' : ''}${(value * 100).toFixed(2)}%` : '-'
@@ -67,12 +68,14 @@ const positiveInteger = (value: string | undefined, fallback: number): number =>
   return parsed
 }
 
-const balances = async (client: WaltClient, fiat: string): Promise<Report> => {
+const balances = async (client: WaltClient, fiat: string, options: CliOptions): Promise<Report> => {
   const data = await client.balances(fiat as FiatCurrency)
   const total = Number(data.overall_available_balance_fiat_amount)
-  const rows = data.accounts
+  const held = data.accounts
     .filter((account) => Number(account.total_balance) > 0)
     .map((account) => ({ account, value: Number(account.available_balance_fiat_amount) }))
+  const shown = options.all ? held : held.filter(({ value }) => !(value < 0.005))
+  const rows = shown
     .sort((a, b) => b.value - a.value)
     .map(({ account, value }) => ({
       asset: account.currency,
@@ -90,7 +93,12 @@ const balances = async (client: WaltClient, fiat: string): Promise<Report> => {
       { key: 'share', title: 'SHARE', numeric: true }
     ],
     rows,
-    footer: [`total ${total.toFixed(2)} ${data.fiat_currency}`]
+    footer: [
+      `total ${total.toFixed(2)} ${data.fiat_currency}`,
+      ...(shown.length < held.length
+        ? [`${held.length - shown.length} worth less than 0.01 not shown, --all lists them`]
+        : [])
+    ]
   }
 }
 
@@ -146,7 +154,7 @@ const transactions = async (client: WaltClient, options: CliOptions): Promise<Re
       time: minute(row.created_at),
       type: row.type,
       gateway: row.gateway,
-      amount: row.amount,
+      amount: trimmed(row.amount),
       asset: row.currency,
       status: row.status
     }))
@@ -271,7 +279,7 @@ const orders = async (client: WaltClient, options: CliOptions): Promise<Report> 
       fee: order.fee,
       status: order.status
     })),
-    footer: [`${held.toFixed(2)} held by open orders`]
+    footer: [`${held.toFixed(2)} USDT held by open orders`]
   }
 }
 
@@ -300,13 +308,13 @@ const perps = async (client: WaltClient, options: CliOptions): Promise<Report> =
       contract: position.contract_name,
       side: position.side,
       leverage: `${position.leverage}x`,
-      size: position.value_base,
-      entry: position.avg_entry_price,
+      size: trimmed(position.value_base),
+      entry: significant(Number(position.avg_entry_price)),
       margin: fixed(position.margin_quote),
       opened: minute(position.created_at),
       closed: minute(position.updated_at),
-      mark: position.valuation.mark_price,
-      liquidation: fixed(position.liquidation_price, 4),
+      mark: significant(Number(position.valuation.mark_price)),
+      liquidation: significant(Number(position.liquidation_price)),
       pnl: fixed(position.valuation.unrealized_pnl_quote)
     }))
   }
@@ -375,7 +383,7 @@ export const run = async (
   let report: Report
   switch (command) {
     case 'balances':
-      report = await balances(client, fiat)
+      report = await balances(client, fiat, options)
       break
     case 'history':
       report = await history(client, options)

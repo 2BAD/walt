@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `walt balances` no longer lists balances worth less than 0.01 unless `--all` is given
+
+### Fixed
+
+- Fixed long prices and amounts stretching the `walt perps` and `walt transactions` tables
+
 ## [2.0.0] - 2026-11-07
 
 ### Highlights
