@@ -31,6 +31,18 @@ export TG_SESSION=SESSION_STRING
 
 `--env-file .env` reads the same variables from a file. The session string grants full access to the account.
 
+## Token state
+
+```sh
+walt token > state.json
+```
+
+It signs in as a new device and prints one line of JSON for `RefreshTokenSource`.
+The new device has its own refresh token.
+The CLI keeps its own token and both stay valid.
+
+The token state grants full access to the account. Keep it out of version control.
+
 ## Commands
 
 ```sh

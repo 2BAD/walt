@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added the `@2bad/walt/client` entry point, which runs without Telegram or Node.js APIs
 - Added `RefreshTokenSource` to renew tokens from a saved token state without Telegram
+- Added `walt token` to print a token state for use on another server
 
 ### Changed
 

@@ -8,6 +8,7 @@ import { TelegramClient } from 'teleproto'
 import { StringSession } from 'teleproto/sessions/index.js'
 import { COMMANDS, run, UsageError } from '~/cli/run.ts'
 import { WaltClient } from '~/client.ts'
+import type { TokenState } from '~/refresh.ts'
 import { TelegramTokenSource } from '~/telegram/auth.ts'
 import { WaltAuthError, WaltRequestError } from '~/transport.ts'
 
@@ -48,6 +49,7 @@ const USAGE = `Usage: walt <command> [options]
 
 ${COMMANDS}
   login                     sign in to Telegram and print TG_SESSION
+  token                     sign in as a new device and print its token state as JSON
 
 Options:
   --json                    print JSON instead of a table
@@ -119,12 +121,31 @@ if (!session || !apiId || !apiHash) {
   fail('set TG_API_ID, TG_API_HASH and TG_SESSION first (run `walt login` for the session)', 2)
 }
 
-const source = new TelegramTokenSource({ session: session ?? '', apiId, apiHash: apiHash ?? '' })
+if (command === 'token') console.log = console.error
+let issued: TokenState | null = null
+const source = new TelegramTokenSource({
+  session: session ?? '',
+  apiId,
+  apiHash: apiHash ?? '',
+  ...(command === 'token' && {
+    storage: {
+      load: async () => null,
+      save: async (state) => {
+        issued = state
+      }
+    }
+  })
+})
 const client = new WaltClient({ tokenProvider: (rejected) => source.token(rejected) })
 
 let exitCode = 0
 try {
-  console.log(await run(client, command, args, values))
+  if (command === 'token') {
+    await source.token()
+    stdout.write(`${JSON.stringify(issued)}\n`)
+  } else {
+    console.log(await run(client, command, args, values))
+  }
 } catch (error) {
   if (error instanceof UsageError) {
     console.error(`walt: ${error.message}\nRun \`walt --help\` for usage.`)
