@@ -12,6 +12,8 @@ for (const { currency, amount, fiatValue } of entries) {
 
 Entries are sorted by fiat value. Zero balances are left out.
 
+A USD account is valued at the latest candle close. Any other fiat currency uses the values from `accounts()`.
+
 `total` is the figure the Walt app shows. Staked funds count in `total` but have no entry.
 
 ```ts

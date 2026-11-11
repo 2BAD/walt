@@ -17,6 +17,7 @@ import type { Transaction, TransactionDetails, TransactionGateway, TransactionsP
 import { Transport, WaltAuthError } from '~/transport.ts'
 
 const BASE_URL = 'https://walletbot.me'
+const CANDLE_BATCH_SIZE = 20
 
 const calendarDate = (date: Date): string =>
   [date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()]
@@ -52,9 +53,9 @@ export type Portfolio = {
   /** Spot balances above zero, largest fiat value first. */
   entries: PortfolioEntry[]
   entriesTotal: number
-  /** The API's own total, which includes staked funds. */
+  /** `entriesTotal + staked`. */
   total: number
-  /** `total - entriesTotal`, itemised by `earnCampaigns()`. */
+  /** What the API total counts beyond spot balances, itemised by `earnCampaigns()`. */
   staked: number
   fiatCurrency: string
 }
@@ -386,7 +387,7 @@ export class WaltClient {
   /**
    * OHLCV candles for several tickers in one request.
    *
-   * @param requests - One per series wanted.
+   * @param requests - One per series wanted, 20 at most.
    */
   async candles(requests: CandleRequest[]): Promise<CandleSeries[]> {
     const { responses } = await this.transport.post<{ responses: CandleSeries[] }>(
@@ -451,14 +452,17 @@ export class WaltClient {
     return this.transport.post<Exchange>('/api/v1/exchange/create_exchange/', request, 0)
   }
 
-  /** Non-zero spot balances against the API total, which also counts staked funds. */
+  /**
+   * Non-zero spot balances and the total, which also counts staked funds.
+   * A USD account is priced at the latest candle close, any other at the rates `accounts()` reports.
+   */
   async portfolio(): Promise<Portfolio> {
     const data = await this.accounts()
     if (!Array.isArray(data.accounts)) {
       throw new Error('accounts response carries no accounts array')
     }
-    const total = decimal(data.available_balance_total_fiat_amount)
-    if (total === null) {
+    const accountsTotal = decimal(data.available_balance_total_fiat_amount)
+    if (accountsTotal === null) {
       throw new Error(`accounts total is not a number: ${String(data.available_balance_total_fiat_amount)}`)
     }
 
@@ -477,14 +481,29 @@ export class WaltClient {
       }
       entries.push({ currency: account.currency, amount: account.available_balance, fiatValue })
     }
+    const staked = accountsTotal - entries.reduce((sum, entry) => sum + entry.fiatValue, 0)
+
+    if (data.available_balance_total_fiat_currency === 'USD') {
+      const requests = entries.map((entry) => ({ ticker: `${entry.currency}/USD/SPOT`, resolution: '1m', limit: 1 }))
+      const batches = Array.from({ length: Math.ceil(requests.length / CANDLE_BATCH_SIZE) }, (_, index) =>
+        requests.slice(index * CANDLE_BATCH_SIZE, (index + 1) * CANDLE_BATCH_SIZE)
+      )
+      const series = (await Promise.all(batches.map((batch) => this.candles(batch)))).flat()
+      const closes = new Map(series.map((item) => [item.ticker, decimal(item.candles.at(-1)?.c)]))
+      for (const entry of entries) {
+        const close = closes.get(`${entry.currency}/USD/SPOT`) ?? null
+        if (close === null) throw new Error(`${entry.currency} has no candle price`)
+        entry.fiatValue = Number(entry.amount) * close
+      }
+    }
 
     const entriesTotal = entries.reduce((sum, entry) => sum + entry.fiatValue, 0)
 
     return {
       entries: entries.sort((a, b) => b.fiatValue - a.fiatValue),
       entriesTotal,
-      total,
-      staked: total - entriesTotal,
+      total: entriesTotal + staked,
+      staked,
       fiatCurrency: data.available_balance_total_fiat_currency
     }
   }
