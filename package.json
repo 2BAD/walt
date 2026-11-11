@@ -33,6 +33,12 @@
         "types": "./build/index.d.ts",
         "default": "./build/index.js"
       }
+    },
+    "./client": {
+      "import": {
+        "types": "./build/core.d.ts",
+        "default": "./build/core.js"
+      }
     }
   },
   "bin": {

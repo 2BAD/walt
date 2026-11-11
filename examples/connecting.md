@@ -70,6 +70,44 @@ const source = new TelegramTokenSource({
 
 Pass `storage: false` to keep the token in memory only.
 
+## Without Telegram
+
+`RefreshTokenSource` renews the token over HTTPS from a token state made elsewhere.
+Import it from `@2bad/walt/client` to leave the Telegram library and Node.js APIs out of the bundle.
+
+```ts
+import { RefreshTokenSource, WaltClient } from '@2bad/walt/client'
+
+const source = new RefreshTokenSource({
+  state: JSON.parse(env.WALT_TOKEN_STATE),
+  storage: {
+    load: async () => JSON.parse(await env.KV.get('walt-token')),
+    save: (state) => env.KV.put('walt-token', JSON.stringify(state))
+  }
+})
+
+const client = new WaltClient({ tokenProvider: (rejected) => source.token(rejected) })
+```
+
+Make a token state with `walt token`. See [Command line](cli.md#token-state).
+
+Each renewal rotates the refresh token and passes the new state to `save`. Persist it, or the next renewal fails.
+
+When the refresh token is rejected, `token()` throws `WaltAuthError`. Run `walt token` again to get a new state.
+
+```ts
+const source = new RefreshTokenSource({
+  // optional, off by default
+  state, // starting state, otherwise storage.load() supplies it
+  storage, // load and save, save receives every renewed state
+  fetch, // custom fetch implementation
+
+  // optional, values are the defaults
+  baseUrl: 'https://walletbot.me', // web app origin, sent as origin and referer
+  authUrl: 'https://alectryon.walletbot.me' // host for token refresh
+})
+```
+
 ## `WaltClient`
 
 ```ts

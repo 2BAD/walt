@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { errors } from 'teleproto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TokenState, TokenStorage } from '~/telegram/auth.ts'
+import type { TokenState, TokenStorage } from '~/refresh.ts'
 import { TelegramTokenSource } from '~/telegram/auth.ts'
 
 const telegram = vi.hoisted(() => ({

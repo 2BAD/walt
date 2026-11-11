@@ -21,6 +21,9 @@ npm install @2bad/walt
 
 ESM only. Requires Node.js 26 or later.
 
+`@2bad/walt/client` exports everything except `TelegramTokenSource`.
+It imports no Node.js API and no Telegram library, for runtimes such as Cloudflare Workers.
+
 ## Quick start
 
 ```ts
@@ -36,7 +39,7 @@ await source.disconnect()
 
 ## Examples
 
-- [Connecting](examples/connecting.md): Telegram credentials, token storage, retries and pacing
+- [Connecting](examples/connecting.md): Telegram credentials, token storage, refreshing without Telegram, retries and pacing
 - [Balances](examples/balances.md): accounts, portfolio, profit and loss, staked funds
 - [Prices](examples/prices.md): coin rates, charts and past prices
 - [Exchange](examples/exchange.md): available pairs, quotes, exchanges and limit orders
@@ -54,6 +57,12 @@ new TelegramTokenSource(options: TelegramTokenSourceOptions)
 type TelegramTokenSource = {
   token(rejected?: string): Promise<string>
   disconnect(): Promise<void>
+}
+
+new RefreshTokenSource(options: RefreshTokenSourceOptions)
+
+type RefreshTokenSource = {
+  token(rejected?: string): Promise<string>
 }
 
 new WaltClient(options: WaltClientOptions)

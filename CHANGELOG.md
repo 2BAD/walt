@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added the `@2bad/walt/client` entry point, which runs without Telegram or Node.js APIs
+- Added `RefreshTokenSource` to renew tokens from a saved token state without Telegram
+
 ### Changed
 
 - `walt balances` no longer lists balances worth less than 0.01 unless `--all` is given

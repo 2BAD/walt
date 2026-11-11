@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import type { TokenState, TokenStorage } from '~/telegram/auth.ts'
+import type { TokenState, TokenStorage } from '~/refresh.ts'
 
 export const defaultTokenPath = (session: string): string => {
   const cacheHome = process.env['XDG_CACHE_HOME'] || join(homedir(), '.cache')

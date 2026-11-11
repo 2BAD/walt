@@ -10,7 +10,8 @@
     "allowImportingTsExtensions": true,
     "paths": {
       "~/*": ["./source/*"],
-      "@2bad/walt": ["./source/index.ts"]
+      "@2bad/walt": ["./source/index.ts"],
+      "@2bad/walt/client": ["./source/core.ts"]
     }
   }
 }
