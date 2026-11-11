@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto'
 import { BROWSER_HEADERS, SENTRY_PUBLIC_KEY, SENTRY_RELEASE } from '~/browser.ts'
 
 export class WaltAuthError extends Error {}
@@ -24,7 +23,8 @@ const BEARER_SERVICES = ['/emporos/', '/portmone/', '/kandelabr/']
 
 const MAX_RETRY_DELAY_MS = 30_000
 
-const hex = (bytes: number): string => randomBytes(bytes).toString('hex')
+const hex = (bytes: number): string =>
+  Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) => byte.toString(16).padStart(2, '0')).join('')
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -43,8 +43,9 @@ const retryAfterOf = (response: Response): number | null => {
 
 const telegramUserIdOf = (token: string): number | null => {
   try {
-    const payload = token.split('.')[1] ?? ''
-    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
+    const payload = (token.split('.')[1] ?? '').replaceAll('-', '+').replaceAll('_', '/')
+    const bytes = Uint8Array.from(atob(payload), (char) => char.charCodeAt(0))
+    const claims = JSON.parse(new TextDecoder().decode(bytes)) as {
       web_view_init_data?: { user?: { id?: unknown } }
     }
     const id = claims.web_view_init_data?.user?.id
