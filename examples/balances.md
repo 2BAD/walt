@@ -60,6 +60,18 @@ for (const campaign of joined) {
 
 `earnCampaignTransactions()` returns one page. Pass the previous page as `after` to get the next one.
 
+## IPO subscriptions
+
+```ts
+for (const { allocation_currency, active_order } of await client.ipos()) {
+  if (active_order) console.log(allocation_currency, active_order.amount, active_order.pay_currency) // ACMEx 100.00 USDT
+}
+```
+
+The amount of an active order is in no balance and not in `total`.
+
+`ipo()` returns one IPO with its dates, order limits, fee and company.
+
 ## `portfolioHistory()`
 
 Balance, profit and loss, deposits and withdrawals per day (`1d`) or per calendar month (`1m`).

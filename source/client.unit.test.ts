@@ -654,6 +654,55 @@ describe('waltClient limit orders', () => {
   })
 })
 
+describe('waltClient ipo', () => {
+  const order = {
+    order_uid: 'order-uid-1',
+    amount: '100.00',
+    pay_currency: 'USDT',
+    status: 'active',
+    created_at: '2026-01-02T03:04:05.000000Z',
+    updated_at: '2026-01-02T03:04:05.000000Z'
+  }
+  const listed = {
+    id: 101,
+    allocation_currency: 'ACMEx',
+    funding_deadline_dt: '2026-01-09T15:00:00Z',
+    indicative_price: '10.00',
+    indicative_price_range_min: '9.00',
+    indicative_price_range_max: '11.00',
+    is_funding_open: true
+  }
+
+  it('unwraps the ipo list and keeps the order of each', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({
+        ipos: [
+          { ...listed, active_order: order },
+          { ...listed, id: 102, active_order: null }
+        ]
+      })
+    )
+    const ipos = await makeClient(fetchImpl).ipos()
+
+    expect(ipos.map((ipo) => ipo.active_order?.amount)).toStrictEqual(['100.00', undefined])
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/ipo/info/list/')
+  })
+
+  it('fetches one ipo by id with its trailing slash', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ ...listed, pay_currency: 'USDT', fee_percent: '1.0', steps: [], active_order: order })
+    )
+    const ipo = await makeClient(fetchImpl).ipo(101)
+
+    expect(ipo.active_order).toStrictEqual(order)
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/ipo/info/101/')
+  })
+})
+
 describe('waltClient balances', () => {
   it('unwraps the data envelope', async () => {
     expect.assertions(2)

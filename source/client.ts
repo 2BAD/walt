@@ -4,6 +4,7 @@ import type { Balances } from '~/api/balances.ts'
 import type { CandleRequest, CandleSeries } from '~/api/candles.ts'
 import type { EarnCampaignsResponse, EarnRate, EarnTransaction, EarnTransactionsPage } from '~/api/earn.ts'
 import type { AvailableExchanges, Exchange, ExchangeQuote, ExchangeRequest } from '~/api/exchange.ts'
+import type { Ipo, IpoDetails } from '~/api/ipo.ts'
 import type { LimitOrder, LimitOrderBounds, LimitOrderQuote, LimitOrderToken } from '~/api/limit-orders.ts'
 import type {
   PerpContract,
@@ -335,6 +336,17 @@ export class WaltClient {
       '/emporos/public-api/orders/limit/tokens'
     )
     return tokens
+  }
+
+  /** Every IPO the app lists, with your order in each. Past IPOs are not listed. */
+  async ipos(): Promise<Ipo[]> {
+    const { ipos } = await this.transport.get<{ ipos: Ipo[] }>('/api/v1/ipo/info/list/')
+    return ipos
+  }
+
+  /** @param id - `id` from `ipos()`. */
+  ipo(id: number): Promise<IpoDetails> {
+    return this.transport.get<IpoDetails>(`/api/v1/ipo/info/${encodeURIComponent(String(id))}/`)
   }
 
   /** @param contractId - Only this contract. */

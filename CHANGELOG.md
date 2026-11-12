@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added `ipos()` and `ipo()` to read the listed IPOs and your subscription order in each
+
 ## [2.1.1] - 2026-11-12
 
 ### Changed
