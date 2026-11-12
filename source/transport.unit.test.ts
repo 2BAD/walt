@@ -148,6 +148,15 @@ describe('transport headers', () => {
     expect(headersOf(fetchImpl)['origin']).toBeUndefined()
     expect(headersOf(fetchImpl)['content-type']).toBeUndefined()
   })
+
+  it('calls fetch without a receiver', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: [] }))
+    await makeTransport(fetchImpl).get(ACCOUNTS)
+
+    expect(fetchImpl.mock.contexts[0]).toBeUndefined()
+  })
 })
 
 describe('transport errors', () => {

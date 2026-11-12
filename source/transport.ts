@@ -155,9 +155,10 @@ export class Transport {
       headers['content-type'] = 'application/json'
       headers['origin'] = this.baseUrl
     }
+    const { fetchImpl } = this
     let response: Response
     try {
-      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+      response = await fetchImpl(`${this.baseUrl}${path}`, {
         method,
         headers,
         body: method === 'POST' ? JSON.stringify(body) : null

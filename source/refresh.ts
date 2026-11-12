@@ -135,7 +135,8 @@ export class RefreshTokenSource {
   }
 
   protected async post(path: string, body: Record<string, unknown>): Promise<AuthResponse> {
-    const response = await this.fetchImpl(`${this.authUrl}${path}`, {
+    const { fetchImpl } = this
+    const response = await fetchImpl(`${this.authUrl}${path}`, {
       method: 'POST',
       headers: {
         ...BROWSER_HEADERS,

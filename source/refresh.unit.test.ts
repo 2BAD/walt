@@ -76,6 +76,15 @@ describe('refreshTokenSource', () => {
     })
   })
 
+  it('calls fetch without a receiver', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => refreshed())
+    await new RefreshTokenSource({ state: state({ expiresAt: NOW }), fetch: fetchImpl }).token()
+
+    expect(fetchImpl.mock.contexts[0]).toBeUndefined()
+  })
+
   it('loads the state from storage when none is given', async () => {
     expect.assertions(2)
 
