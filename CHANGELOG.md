@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-11-12
+
 ### Changed
 
 - `portfolio()` now values a USD account at the latest candle close, matching the total the Walt app shows
