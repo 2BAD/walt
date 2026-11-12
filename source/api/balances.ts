@@ -1,5 +1,8 @@
 export type Balance = {
-  /** `REGULAR` for spot, `HOLD_LIMIT` for USDT reserved by open limit orders, `EARN_V2` for staked funds. */
+  /**
+   * `REGULAR` for spot, `EARN_V2` for staked funds, `HOLD_LIMIT` for USDT reserved by open limit orders
+   * or the coin an open take-profit order sells.
+   */
   account_type: string
   currency: string
   asset_currency: string

@@ -92,7 +92,8 @@ export class WaltClient {
   }
 
   /**
-   * Every balance with its account type, including USDT held by open limit orders, which `accounts()` omits.
+   * Every balance with its account type, including what open limit and take-profit orders hold,
+   * which `accounts()` omits.
    *
    * @param fiatCurrency - Currency of the fiat amounts and the overall total.
    */
