@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added `ipos()` and `ipo()` to read the listed IPOs and your subscription order in each
+- Added the `abacus_tid` field to `Transaction` and `TransactionDetails`
 
 ## [2.1.1] - 2026-11-12
 

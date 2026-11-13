@@ -78,6 +78,7 @@ export type Transaction = {
   block_reason: string | null
   crypto_tx_id: string | null
   gateway_details: unknown
+  abacus_tid: string | null
 }
 
 export type TransactionsPage = {
@@ -122,6 +123,7 @@ export type TransactionDetails = {
   is_blocked: boolean
   is_cancellable: boolean
   block_reason: string | null
+  abacus_tid: string | null
 }
 
 export type TransactionLeg = {

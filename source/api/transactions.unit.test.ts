@@ -34,6 +34,7 @@ const detailsOf = (overrides: Partial<TransactionDetails>): TransactionDetails =
   is_blocked: false,
   is_cancellable: false,
   block_reason: null,
+  abacus_tid: null,
   ...overrides
 })
 
