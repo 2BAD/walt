@@ -34,22 +34,14 @@ export type {
   EarnInterestRate,
   EarnPayoutPool,
   EarnRate,
-  EarnTransaction,
-  EarnTransactionsPage
+  EarnTransaction
 } from '~/api/earn.ts'
 export type { AvailableExchanges, Exchange, ExchangeQuote, ExchangeRequest } from '~/api/exchange.ts'
 export type { Ipo, IpoDetails, IpoOrder, IpoStep } from '~/api/ipo.ts'
-export type {
-  LimitOrder,
-  LimitOrderBounds,
-  LimitOrderQuote,
-  LimitOrdersPage,
-  LimitOrderToken
-} from '~/api/limit-orders.ts'
+export type { LimitOrder, LimitOrderBounds, LimitOrderQuote, LimitOrderToken } from '~/api/limit-orders.ts'
 export type {
   PerpContract,
   PerpOrder,
-  PerpOrdersPage,
   PerpOrderStatus,
   PerpPosition,
   PerpPositionStatus,
@@ -61,8 +53,7 @@ export type {
   Transaction,
   TransactionDetails,
   TransactionGateway,
-  TransactionLeg,
-  TransactionsPage
+  TransactionLeg
 } from '~/api/transactions.ts'
 export { WaltClient } from '~/client.ts'
 export type { Portfolio, PortfolioEntry, WaltClientOptions } from '~/client.ts'

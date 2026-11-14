@@ -159,11 +159,22 @@ describe('transactions', () => {
   it('lists the latest transactions', async () => {
     expect.assertions(2)
 
-    const { client, fetchImpl } = clientFor({ '/api/v1/transactions/': page })
-    const output = await run(client, 'transactions', [], { limit: '5' })
+    const { client } = clientFor({ '/api/v1/transactions/': page })
+    const output = await run(client, 'transactions', [])
 
-    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('https://walletbot.me/api/v1/transactions/?limit=5')
+    expect(output.split('\n')).toHaveLength(2)
     expect(output.split('\n')[1]).toBe('2026-01-02 03:04  deposit  p2p_order     100  USDT   success')
+  })
+
+  it('shows only as many transactions as the limit', async () => {
+    expect.assertions(2)
+
+    const second = { ...page.transactions[0], type: 'withdraw' }
+    const { client } = clientFor({ '/api/v1/transactions/': { ...page, transactions: [...page.transactions, second] } })
+    const output = await run(client, 'transactions', [], { limit: '1' })
+
+    expect(output.split('\n')).toHaveLength(2)
+    expect(output.split('\n')[1]).toContain('deposit')
   })
 
   it('filters by asset', async () => {
@@ -172,7 +183,7 @@ describe('transactions', () => {
     const { client, fetchImpl } = clientFor({ '/api/v1/transactions/single-account/': page })
     await run(client, 'transactions', [], { asset: 'USDT' })
 
-    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('single-account/?crypto_currency=USDT&limit=20')
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('single-account/?crypto_currency=USDT&limit=1000')
   })
 
   it('rejects a limit that is not a whole number', async () => {

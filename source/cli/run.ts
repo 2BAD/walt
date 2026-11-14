@@ -140,7 +140,7 @@ const history = async (client: WaltClient, options: CliOptions): Promise<Report>
 
 const transactions = async (client: WaltClient, options: CliOptions): Promise<Report> => {
   const limit = positiveInteger(options.limit, 20)
-  const page = options.asset ? await client.accountTransactions(options.asset, limit) : await client.transactions(limit)
+  const rows = await client.transactions(options.asset ? { currency: options.asset } : {})
   return {
     columns: [
       { key: 'time', title: 'TIME (UTC)' },
@@ -150,7 +150,7 @@ const transactions = async (client: WaltClient, options: CliOptions): Promise<Re
       { key: 'asset', title: 'ASSET' },
       { key: 'status', title: 'STATUS' }
     ],
-    rows: page.transactions.map((row) => ({
+    rows: rows.slice(0, limit).map((row) => ({
       time: minute(row.created_at),
       type: row.type,
       gateway: row.gateway,
@@ -256,7 +256,7 @@ const quote = async (client: WaltClient, args: string[]): Promise<Report> => {
 }
 
 const orders = async (client: WaltClient, options: CliOptions): Promise<Report> => {
-  const list = await Array.fromAsync(client.allLimitOrders(options.all ? {} : { status: ['OPEN', 'CANCELLING'] }))
+  const list = await client.limitOrders(options.all ? {} : { statuses: ['OPEN', 'CANCELLING'] })
   const held = list
     .filter((order) => order.status === 'OPEN' && order.side === 'BUY')
     .reduce((sum, order) => sum + Number(order.total), 0)

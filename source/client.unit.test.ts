@@ -235,11 +235,15 @@ describe('waltClient', () => {
   it('encodes the padding in a base64 cursor', async () => {
     expect.assertions(1)
 
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [] }))
-    await makeClient(fetchImpl).transactions(undefined, 'MTAwMDAwMDAwMDAwMDE6Tm9uZQ==')
+    const fetchImpl = vi.fn<typeof fetch>(async (input) =>
+      String(input).includes('cursor=')
+        ? jsonResponse({ transactions: [] })
+        : jsonResponse({ transactions: [{ id: 10000000000001 }], next_cursor: 'MTAwMDAwMDAwMDAwMDE6Tm9uZQ==' })
+    )
+    await makeClient(fetchImpl).transactions()
 
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
-      'https://walletbot.me/api/v1/transactions/?cursor=MTAwMDAwMDAwMDAwMDE6Tm9uZQ%3D%3D'
+    expect(fetchImpl.mock.calls[1]?.[0]).toBe(
+      'https://walletbot.me/api/v1/transactions/?limit=1000&cursor=MTAwMDAwMDAwMDAwMDE6Tm9uZQ%3D%3D'
     )
   })
 
@@ -256,25 +260,14 @@ describe('waltClient', () => {
     expect.assertions(1)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [] }))
-    await makeClient(fetchImpl).accountTransactions('TON', 20)
+    await makeClient(fetchImpl).transactions({ currency: 'TON' })
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
-      'https://walletbot.me/api/v1/transactions/single-account/?crypto_currency=TON&limit=20'
+      'https://walletbot.me/api/v1/transactions/single-account/?crypto_currency=TON&limit=1000'
     )
   })
 
-  it('omits the limit when not given', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [] }))
-    await makeClient(fetchImpl).accountTransactions('USDT')
-
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
-      'https://walletbot.me/api/v1/transactions/single-account/?crypto_currency=USDT'
-    )
-  })
-
-  it('stops walking when a page comes back empty despite a fresh cursor', async () => {
+  it('stops paging when a page comes back empty despite a fresh cursor', async () => {
     expect.assertions(2)
 
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
@@ -284,23 +277,23 @@ describe('waltClient', () => {
       return jsonResponse({ transactions: [], next_cursor: 'endless' })
     })
 
-    const rows = await Array.fromAsync(makeClient(fetchImpl).allTransactions())
+    const rows = await makeClient(fetchImpl).transactions()
 
     expect(rows.map((row) => row.id)).toStrictEqual([10000000000001, 10000000000002])
     expect(fetchImpl).toHaveBeenCalledTimes(3)
   })
 
-  it('stops walking when the api does return a null cursor', async () => {
+  it('stops paging when the api does return a null cursor', async () => {
     expect.assertions(2)
 
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       jsonResponse({ transactions: [{ id: 10000000000001 }], next_cursor: null })
     )
 
-    const rows = await Array.fromAsync(makeClient(fetchImpl).allTransactions(50))
+    const rows = await makeClient(fetchImpl).transactions()
 
     expect(rows).toHaveLength(1)
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/transactions/?limit=50')
+    expect(fetchImpl).toHaveBeenCalledOnce()
   })
 
   it('throws instead of looping when the api repeats a cursor', async () => {
@@ -310,11 +303,11 @@ describe('waltClient', () => {
       jsonResponse({ transactions: [{ id: 10000000000001 }], next_cursor: 'stuck' })
     )
 
-    await expect(Array.fromAsync(makeClient(fetchImpl).allTransactions())).rejects.toThrow('cursor twice')
+    await expect(makeClient(fetchImpl).transactions()).rejects.toThrow('cursor twice')
     expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 
-  it('threads the currency and cursor through an account walk', async () => {
+  it('keeps the currency on every page of one currency', async () => {
     expect.assertions(2)
 
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
@@ -323,11 +316,11 @@ describe('waltClient', () => {
       return jsonResponse({ transactions: [], next_cursor: 'endless' })
     })
 
-    const rows = await Array.fromAsync(makeClient(fetchImpl).allAccountTransactions('TON', 20))
+    const rows = await makeClient(fetchImpl).transactions({ currency: 'TON' })
 
     expect(rows).toHaveLength(1)
     expect(fetchImpl.mock.calls[1]?.[0]).toBe(
-      'https://walletbot.me/api/v1/transactions/single-account/?crypto_currency=TON&limit=20&cursor=next'
+      'https://walletbot.me/api/v1/transactions/single-account/?crypto_currency=TON&limit=1000&cursor=next'
     )
   })
 
@@ -359,19 +352,10 @@ describe('waltClient', () => {
     expect.assertions(2)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [], size: 0 }))
-    const { size } = await makeClient(fetchImpl).unconfirmedTransactions()
+    const rows = await makeClient(fetchImpl).unconfirmedTransactions()
 
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/transactions/unconfirmed/')
-    expect(size).toBe(0)
-  })
-
-  it('caps the pending deposit page when a limit is given', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [], size: 0 }))
-    await makeClient(fetchImpl).unconfirmedTransactions(50)
-
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/transactions/unconfirmed/?limit=50')
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/transactions/unconfirmed/?limit=1000')
+    expect(rows).toStrictEqual([])
   })
 
   it('reads profit and loss from the analytics service', async () => {
@@ -459,20 +443,6 @@ describe('waltClient', () => {
     expect(currency).toBe('USD')
   })
 
-  it('pages the global and per-currency transaction lists', async () => {
-    expect.assertions(2)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [] }))
-    const client = makeClient(fetchImpl)
-    await client.transactions(20, 'cur/sor')
-    await client.accountTransactions('TON', 2, 'cur/sor')
-
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/transactions/?limit=20&cursor=cur%2Fsor')
-    expect(fetchImpl.mock.calls[1]?.[0]).toBe(
-      'https://walletbot.me/api/v1/transactions/single-account/?crypto_currency=TON&limit=2&cursor=cur%2Fsor'
-    )
-  })
-
   it.each([
     [{ maxConcurrent: 0 }, 'maxConcurrent'],
     [{ maxConcurrent: Number.NaN }, 'maxConcurrent'],
@@ -511,51 +481,35 @@ describe('waltClient earn', () => {
     await makeClient(fetchImpl).earnCampaignTransactions(11)
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
-      'https://walletbot.me/earn/public-api/v1/campaigns/11/transactions?merge_with_transfer_requests=true'
+      'https://walletbot.me/earn/public-api/v1/campaigns/11/transactions?limit=1000&merge_with_transfer_requests=true'
     )
   })
 
-  it('asks for the page after a given one with its set cursors', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [] }))
-    await makeClient(fetchImpl).earnCampaignTransactions(11, 50, {
-      transactions: [],
-      deposit_acc_next_from: 10000000000001,
-      payout_acc_next_from: null,
-      transfer_request_next_before_datetime: '2026-01-01T00:00:00Z'
-    })
-    const query = new URL(String(fetchImpl.mock.calls[0]?.[0])).searchParams
-
-    expect(Object.fromEntries(query)).toStrictEqual({
-      limit: '50',
-      merge_with_transfer_requests: 'true',
-      deposit_acc_offset_id: '10000000000001',
-      transfer_request_before_datetime: '2026-01-01T00:00:00Z'
-    })
-  })
-
-  it('walks campaign transactions until a short page, although the cursor stays set', async () => {
+  it('pages campaign transactions with every set cursor until a short page, although the cursor stays set', async () => {
     expect.assertions(3)
 
+    const fullPage = Array.from({ length: 1000 }, (_, index) => ({ id: 10000000002000 - index }))
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const offset = new URL(String(input)).searchParams.get('deposit_acc_offset_id')
-      const ids = offset === null ? [10000000000003, 10000000000002] : [10000000000001]
+      const rows = offset === null ? fullPage : [{ id: 10000000000001 }]
       return jsonResponse({
-        transactions: ids.map((id) => ({ id })),
-        deposit_acc_next_from: Math.min(...ids),
+        transactions: rows,
+        deposit_acc_next_from: Math.min(...rows.map((row) => row.id)),
         payout_acc_next_from: null,
-        transfer_request_next_before_datetime: null
+        transfer_request_next_before_datetime: '2026-01-01T00:00:00Z'
       })
     })
 
-    const rows = await Array.fromAsync(makeClient(fetchImpl).allEarnCampaignTransactions(11, 2))
+    const rows = await makeClient(fetchImpl).earnCampaignTransactions(11)
 
-    expect(rows.map((row) => row.id)).toStrictEqual([10000000000003, 10000000000002, 10000000000001])
+    expect(rows).toHaveLength(1001)
     expect(fetchImpl).toHaveBeenCalledTimes(2)
-    expect(new URL(String(fetchImpl.mock.calls[1]?.[0])).searchParams.get('deposit_acc_offset_id')).toBe(
-      '10000000000002'
-    )
+    expect(Object.fromEntries(new URL(String(fetchImpl.mock.calls[1]?.[0])).searchParams)).toStrictEqual({
+      limit: '1000',
+      merge_with_transfer_requests: 'true',
+      deposit_acc_offset_id: '10000000001001',
+      transfer_request_before_datetime: '2026-01-01T00:00:00Z'
+    })
   })
 
   it('throws instead of looping when campaign cursors repeat', async () => {
@@ -563,16 +517,14 @@ describe('waltClient earn', () => {
 
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       jsonResponse({
-        transactions: [{ id: 10000000000001 }],
+        transactions: Array.from({ length: 1000 }, () => ({ id: 10000000000001 })),
         deposit_acc_next_from: 10000000000001,
         payout_acc_next_from: null,
         transfer_request_next_before_datetime: null
       })
     )
 
-    await expect(Array.fromAsync(makeClient(fetchImpl).allEarnCampaignTransactions(11, 1))).rejects.toThrow(
-      'cursor twice'
-    )
+    await expect(makeClient(fetchImpl).earnCampaignTransactions(11)).rejects.toThrow('cursor twice')
   })
 
   it('encodes both sides of a rate lookup', async () => {
@@ -599,56 +551,30 @@ describe('waltClient portfolio history', () => {
 })
 
 describe('waltClient limit orders', () => {
-  it('lists orders filtered by status and returns the items', async () => {
-    expect.assertions(2)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ items: [{ id: 'order-1' }] }))
-    const orders = await makeClient(fetchImpl).limitOrders({ status: ['OPEN', 'CANCELLING'], limit: 100 })
-
-    expect(orders).toStrictEqual([{ id: 'order-1' }])
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
-      'https://walletbot.me/emporos/public-api/orders/limit?status=OPEN&status=CANCELLING&limit=100'
-    )
-  })
-
-  it('asks for the page after a cursor and returns the next one', async () => {
-    expect.assertions(2)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () =>
-      jsonResponse({ items: [{ id: 'order-1' }], next_cursor: 'cursor+2=' })
-    )
-    const page = await makeClient(fetchImpl).limitOrdersPage({ status: ['FILLED'], limit: 1, cursor: 'cursor+1=' })
-
-    expect(page.next_cursor).toBe('cursor+2=')
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
-      'https://walletbot.me/emporos/public-api/orders/limit?status=FILLED&limit=1&cursor=cursor%2B1%3D'
-    )
-  })
-
-  it('walks every page of orders until one comes without a cursor', async () => {
+  it('pages through every order with the status filter on each page until one comes without a cursor', async () => {
     expect.assertions(2)
 
     const fetchImpl = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonResponse({ items: [{ id: 'order-1' }, { id: 'order-2' }], next_cursor: 'cursor-2' }))
+      .mockResolvedValueOnce(jsonResponse({ items: [{ id: 'order-1' }, { id: 'order-2' }], next_cursor: 'cursor+2=' }))
       .mockResolvedValueOnce(jsonResponse({ items: [{ id: 'order-3' }] }))
-    const orders = await Array.fromAsync(makeClient(fetchImpl).allLimitOrders({ status: ['OPEN'] }))
+    const orders = await makeClient(fetchImpl).limitOrders({ statuses: ['OPEN', 'CANCELLING'] })
 
     expect(orders.map((order) => order.id)).toStrictEqual(['order-1', 'order-2', 'order-3'])
     expect(fetchImpl.mock.calls.map(([url]) => String(url))).toStrictEqual([
-      'https://walletbot.me/emporos/public-api/orders/limit?status=OPEN&limit=100',
-      'https://walletbot.me/emporos/public-api/orders/limit?status=OPEN&limit=100&cursor=cursor-2'
+      'https://walletbot.me/emporos/public-api/orders/limit?status=OPEN&status=CANCELLING&limit=100',
+      'https://walletbot.me/emporos/public-api/orders/limit?status=OPEN&status=CANCELLING&limit=100&cursor=cursor%2B2%3D'
     ])
   })
 
-  it('stops walking orders at an empty page that still carries a cursor', async () => {
+  it('stops paging orders at an empty page that still carries a cursor', async () => {
     expect.assertions(2)
 
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({ items: [{ id: 'order-1' }], next_cursor: 'cursor-2' }))
       .mockResolvedValueOnce(jsonResponse({ items: [], next_cursor: 'cursor-3' }))
-    const orders = await Array.fromAsync(makeClient(fetchImpl).allLimitOrders({ limit: 1 }))
+    const orders = await makeClient(fetchImpl).limitOrders()
 
     expect(orders).toHaveLength(1)
     expect(fetchImpl).toHaveBeenCalledTimes(2)
@@ -661,7 +587,7 @@ describe('waltClient limit orders', () => {
       jsonResponse({ items: [{ id: 'order-1' }], next_cursor: 'cursor-2' })
     )
 
-    await expect(Array.fromAsync(makeClient(fetchImpl).allLimitOrders())).rejects.toThrow('returned a cursor twice')
+    await expect(makeClient(fetchImpl).limitOrders()).rejects.toThrow('returned a cursor twice')
   })
 
   it('fetches one order by id', async () => {
@@ -821,15 +747,26 @@ describe('waltClient perps', () => {
   it('lists orders with repeated statuses', async () => {
     expect.assertions(2)
 
-    const page = { orders: [], next_cursor: null, last_sort_ts: null }
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(page))
-
-    expect(
-      await makeClient(fetchImpl).perpOrders({ contractId: 111, limit: 3, statuses: ['pending', 'filled'] })
-    ).toStrictEqual(page)
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
-      'https://walletbot.me/perps/public-api/v2/orders/?contract_id=111&limit=3&statuses=pending&statuses=filled'
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ orders: [{ order_id: 'order-1' }], next_cursor: null, last_sort_ts: null })
     )
+
+    expect(await makeClient(fetchImpl).perpOrders({ contractId: 111, statuses: ['pending', 'filled'] })).toStrictEqual([
+      { order_id: 'order-1' }
+    ])
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/perps/public-api/v2/orders/?limit=100&contract_id=111&statuses=pending&statuses=filled'
+    )
+  })
+
+  it('rejects perp orders that do not fit on one page instead of cutting them off', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ orders: [{ order_id: 'order-1' }], next_cursor: 'more', last_sort_ts: null })
+    )
+
+    await expect(makeClient(fetchImpl).perpOrders()).rejects.toThrow('more than 100 perp orders')
   })
 })
 
@@ -858,14 +795,13 @@ describe('waltClient detailsFor', () => {
       return jsonResponse({ id: Number(id), gateway: 'crypto_exchange' })
     })
 
-  it('yields one detail per row, in the order the rows arrived', async () => {
+  it('returns one detail per row, in the order of the rows', async () => {
     expect.assertions(1)
 
     const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: detailFetch() })
-    const seen = []
-    for await (const detail of client.detailsFor(rows(9))) seen.push(detail.id)
+    const details = await client.detailsFor(rows(9))
 
-    expect(seen).toStrictEqual([
+    expect(details.map((detail) => detail.id)).toStrictEqual([
       10000000000001, 10000000000002, 10000000000003, 10000000000004, 10000000000005, 10000000000006, 10000000000007,
       10000000000008, 10000000000009
     ])
@@ -876,14 +812,14 @@ describe('waltClient detailsFor', () => {
 
     const fetchImpl = detailFetch()
     const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
-    await Array.fromAsync(client.detailsFor([{ id: 10000000000001, gateway: 'xstocks_dividends' } as Transaction]))
+    await client.detailsFor([{ id: 10000000000001, gateway: 'xstocks_dividends' } as Transaction])
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
       'https://walletbot.me/api/v1/transactions/details/10000000000001/?transaction_gateway=xstocks_dividends'
     )
   })
 
-  it('keeps several lookups in flight rather than going one at a time', async () => {
+  it('keeps maxConcurrent lookups in flight', async () => {
     expect.assertions(1)
 
     let inFlight = 0
@@ -902,66 +838,12 @@ describe('waltClient detailsFor', () => {
       fetch: fetchImpl,
       maxConcurrent: 4
     })
-    await Array.fromAsync(client.detailsFor(rows(12)))
+    await client.detailsFor(rows(12))
 
     expect(peak).toBe(4)
   })
 
-  it('accepts an async listing as well as an array', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
-      if (String(input).includes('/details/')) {
-        const id = String(input).split('/details/')[1]?.replace(/\/$/, '') ?? ''
-        return jsonResponse({ id: Number(id) })
-      }
-      const cursor = new URL(String(input)).searchParams.get('cursor')
-      return cursor === null
-        ? jsonResponse({ transactions: [{ id: 10000000000001 }], next_cursor: 'next' })
-        : jsonResponse({ transactions: [], next_cursor: 'endless' })
-    })
-
-    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
-    const seen = await Array.fromAsync(client.detailsFor(client.allTransactions()))
-
-    expect(seen.map((detail) => detail.id)).toStrictEqual([10000000000001])
-  })
-
-  it('stops the walk when a lookup keeps failing', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async (input) =>
-      String(input).includes('10000000000003') ? jsonResponse({}, 500) : jsonResponse({ id: 1 })
-    )
-
-    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
-
-    await expect(Array.fromAsync(client.detailsFor(rows(6)))).rejects.toThrow('failed (500)')
-  })
-
-  it('settles outstanding lookups when the consumer stops early', async () => {
-    expect.assertions(2)
-
-    const rejections: unknown[] = []
-    const onRejection = (reason: unknown) => rejections.push(reason)
-    process.on('unhandledRejection', onRejection)
-
-    const fetchImpl = vi.fn<typeof fetch>(async (input) =>
-      String(input).includes('10000000000004') ? jsonResponse({}, 500) : jsonResponse({ id: 1 })
-    )
-    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
-
-    for await (const detail of client.detailsFor(rows(8))) {
-      expect(detail.id).toBe(1)
-      break
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10))
-    process.off('unhandledRejection', onRejection)
-
-    expect(rejections).toStrictEqual([])
-  })
-
-  it('leaves no unhandled rejection when a later lookup fails while an earlier one is pending', async () => {
+  it('rejects when a lookup keeps failing, with no unhandled rejection from the others', async () => {
     expect.assertions(2)
 
     const rejections: unknown[] = []
@@ -977,7 +859,8 @@ describe('waltClient detailsFor', () => {
     })
     const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
 
-    await expect(Array.fromAsync(client.detailsFor(rows(3)))).rejects.toThrow('failed (400)')
+    await expect(client.detailsFor(rows(3))).rejects.toThrow('failed (400)')
+    await new Promise((resolve) => setTimeout(resolve, 30))
     process.off('unhandledRejection', onRejection)
 
     expect(rejections).toStrictEqual([])

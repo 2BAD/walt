@@ -14,6 +14,7 @@ import type {
 } from '~/api/limit-orders.ts'
 import type {
   PerpContract,
+  PerpOrder,
   PerpOrdersPage,
   PerpOrderStatus,
   PerpPosition,
@@ -25,6 +26,10 @@ import { Transport, WaltAuthError } from '~/transport.ts'
 
 const BASE_URL = 'https://walletbot.me'
 const CANDLE_BATCH_SIZE = 20
+const TRANSACTIONS_PAGE_SIZE = 1000
+const EARN_PAGE_SIZE = 1000
+const LIMIT_ORDERS_PAGE_SIZE = 100
+const PERP_ORDERS_PAGE_SIZE = 100
 
 const calendarDate = (date: Date): string =>
   [date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()]
@@ -69,16 +74,15 @@ export type Portfolio = {
 
 export class WaltClient {
   private readonly transport: Transport
-  private readonly maxConcurrent: number
 
   constructor(options: WaltClientOptions) {
     if (!options.tokenProvider) {
       throw new WaltAuthError('tokenProvider is required')
     }
     const retries = options.retries ?? 3
-    this.maxConcurrent = options.maxConcurrent ?? 4
-    if (!(this.maxConcurrent >= 1)) {
-      throw new RangeError(`maxConcurrent must be at least 1, got ${this.maxConcurrent}`)
+    const maxConcurrent = options.maxConcurrent ?? 4
+    if (!(maxConcurrent >= 1)) {
+      throw new RangeError(`maxConcurrent must be at least 1, got ${maxConcurrent}`)
     }
     if (!Number.isInteger(retries) || retries < 0) {
       throw new RangeError(`retries must be a whole number of at least 0, got ${retries}`)
@@ -89,7 +93,7 @@ export class WaltClient {
       fetch: options.fetch ?? fetch,
       retries,
       retryDelayMs: options.retryDelayMs ?? 500,
-      maxConcurrent: this.maxConcurrent
+      maxConcurrent
     })
   }
 
@@ -123,73 +127,55 @@ export class WaltClient {
     return local_currency
   }
 
-  transactions(limit?: number, cursor?: string): Promise<TransactionsPage> {
-    const query = new URLSearchParams()
-    if (limit !== undefined) query.set('limit', String(limit))
-    if (cursor !== undefined) query.set('cursor', cursor)
-    const search = query.size === 0 ? '' : `?${query.toString()}`
-    return this.transport.get<TransactionsPage>(`/api/v1/transactions/${search}`)
+  /**
+   * Every transaction, newest first.
+   *
+   * @param options - Filters, all optional.
+   * @param options.currency - Only transactions in this currency.
+   */
+  transactions(options: { currency?: string } = {}): Promise<Transaction[]> {
+    const { currency } = options
+    const path = currency === undefined ? '/api/v1/transactions/' : '/api/v1/transactions/single-account/'
+    return this.paged<TransactionsPage, Transaction>(
+      (previous) => {
+        const query = new URLSearchParams(currency === undefined ? {} : { crypto_currency: currency })
+        query.set('limit', String(TRANSACTIONS_PAGE_SIZE))
+        if (previous?.next_cursor != null) query.set('cursor', previous.next_cursor)
+        return this.transport.get<TransactionsPage>(`${path}?${query.toString()}`)
+      },
+      (page) => page.transactions,
+      (page) => page.next_cursor
+    )
   }
 
-  accountTransactions(currency: string, limit?: number, cursor?: string): Promise<TransactionsPage> {
-    const query = new URLSearchParams({ crypto_currency: currency })
-    if (limit !== undefined) query.set('limit', String(limit))
-    if (cursor !== undefined) query.set('cursor', cursor)
-    return this.transport.get<TransactionsPage>(`/api/v1/transactions/single-account/?${query.toString()}`)
-  }
-
-  private async *walk(page: (cursor?: string) => Promise<TransactionsPage>): AsyncGenerator<Transaction> {
-    let cursor: string | undefined
+  private async paged<Page, Item>(
+    fetchPage: (previous?: Page) => Promise<Page>,
+    itemsOf: (page: Page) => Item[],
+    cursorOf: (page: Page) => string | null
+  ): Promise<Item[]> {
+    const items: Item[] = []
     const seen = new Set<string>()
+    let previous: Page | undefined
     for (;;) {
-      const current = await page(cursor)
-      // past the last row the API still returns a next_cursor, with an empty page
-      if (current.transactions.length === 0) return
-      yield* current.transactions
-      if (current.next_cursor === null) return
-      if (seen.has(current.next_cursor)) throw new Error('transactions pagination returned a cursor twice')
-      seen.add(current.next_cursor)
-      cursor = current.next_cursor
+      const page = await fetchPage(previous)
+      const pageItems = itemsOf(page)
+      if (pageItems.length === 0) return items
+      items.push(...pageItems)
+      const cursor = cursorOf(page)
+      if (cursor === null) return items
+      if (seen.has(cursor)) throw new Error('pagination returned a cursor twice')
+      seen.add(cursor)
+      previous = page
     }
-  }
-
-  allTransactions(limit?: number): AsyncGenerator<Transaction> {
-    return this.walk((cursor) => this.transactions(limit, cursor))
-  }
-
-  allAccountTransactions(currency: string, limit?: number): AsyncGenerator<Transaction> {
-    return this.walk((cursor) => this.accountTransactions(currency, limit, cursor))
   }
 
   /**
-   * `transactionDetails()` for each listing row, several in flight, yielded in input order.
-   * A lookup that still fails after its retries ends the iteration.
+   * `transactionDetails()` for each listing row, in the same order. Lookups run concurrently up to `maxConcurrent`.
    *
-   * @param transactions - Listing rows, typically `allTransactions()`.
-   * @yields One detail record per row.
+   * @param transactions - Listing rows, typically from `transactions()`.
    */
-  async *detailsFor(
-    transactions: AsyncIterable<Transaction> | Iterable<Transaction>
-  ): AsyncGenerator<TransactionDetails> {
-    const width = Math.max(1, Math.min(this.maxConcurrent, 32))
-    const inFlight: Promise<TransactionDetails>[] = []
-    try {
-      for await (const transaction of transactions) {
-        const lookup = this.transactionDetails(transaction.id, transaction.gateway)
-        void Promise.allSettled([lookup])
-        inFlight.push(lookup)
-        while (inFlight.length >= width) {
-          const next = inFlight.shift()
-          if (next) yield await next
-        }
-      }
-      while (inFlight.length > 0) {
-        const next = inFlight.shift()
-        if (next) yield await next
-      }
-    } finally {
-      await Promise.allSettled(inFlight)
-    }
+  detailsFor(transactions: Transaction[]): Promise<TransactionDetails[]> {
+    return Promise.all(transactions.map((row) => this.transactionDetails(row.id, row.gateway)))
   }
 
   /**
@@ -203,9 +189,12 @@ export class WaltClient {
     )
   }
 
-  unconfirmedTransactions<T = unknown>(limit?: number): Promise<{ transactions: T[]; size: number }> {
-    const query = limit === undefined ? '' : `?${new URLSearchParams({ limit: String(limit) }).toString()}`
-    return this.transport.get<{ transactions: T[]; size: number }>(`/api/v1/transactions/unconfirmed/${query}`)
+  async unconfirmedTransactions<T = unknown>(): Promise<T[]> {
+    const query = new URLSearchParams({ limit: String(TRANSACTIONS_PAGE_SIZE) })
+    const { transactions } = await this.transport.get<{ transactions: T[] }>(
+      `/api/v1/transactions/unconfirmed/?${query.toString()}`
+    )
+    return transactions
   }
 
   frozenBalances<T = unknown>(): Promise<T[]> {
@@ -221,50 +210,31 @@ export class WaltClient {
    * Deposits, withdrawals and payouts within one campaign, newest first.
    *
    * @param campaignId - `campaign_id` from `earnCampaigns()`.
-   * @param limit - Rows per page. The API defaults to 10.
-   * @param after - The previous page, to fetch the one that follows it.
    */
-  earnCampaignTransactions(
-    campaignId: number | string,
-    limit?: number,
-    after?: EarnTransactionsPage
-  ): Promise<EarnTransactionsPage> {
-    const query = new URLSearchParams()
-    if (limit !== undefined) query.set('limit', String(limit))
-    query.set('merge_with_transfer_requests', 'true')
-    if (after?.deposit_acc_next_from != null) query.set('deposit_acc_offset_id', String(after.deposit_acc_next_from))
-    if (after?.payout_acc_next_from != null) query.set('payout_acc_offset_id', String(after.payout_acc_next_from))
-    if (after?.transfer_request_next_before_datetime != null) {
-      query.set('transfer_request_before_datetime', after.transfer_request_next_before_datetime)
-    }
-    return this.transport.get<EarnTransactionsPage>(
-      `/earn/public-api/v1/campaigns/${encodeURIComponent(String(campaignId))}/transactions?${query.toString()}`
+  earnCampaignTransactions(campaignId: number): Promise<EarnTransaction[]> {
+    const path = `/earn/public-api/v1/campaigns/${encodeURIComponent(String(campaignId))}/transactions`
+    return this.paged<EarnTransactionsPage, EarnTransaction>(
+      (previous) => {
+        const query = new URLSearchParams({ limit: String(EARN_PAGE_SIZE), merge_with_transfer_requests: 'true' })
+        if (previous?.deposit_acc_next_from != null) {
+          query.set('deposit_acc_offset_id', String(previous.deposit_acc_next_from))
+        }
+        if (previous?.payout_acc_next_from != null) {
+          query.set('payout_acc_offset_id', String(previous.payout_acc_next_from))
+        }
+        if (previous?.transfer_request_next_before_datetime != null) {
+          query.set('transfer_request_before_datetime', previous.transfer_request_next_before_datetime)
+        }
+        return this.transport.get<EarnTransactionsPage>(`${path}?${query.toString()}`)
+      },
+      (page) => page.transactions,
+      (page) =>
+        page.transactions.length < EARN_PAGE_SIZE
+          ? null
+          : [page.deposit_acc_next_from, page.payout_acc_next_from, page.transfer_request_next_before_datetime].join(
+              '|'
+            )
     )
-  }
-
-  /**
-   * Every row of `earnCampaignTransactions()`, page by page. The cursors stay set past the last row,
-   * so a page shorter than `limit` ends the walk.
-   *
-   * @param campaignId - `campaign_id` from `earnCampaigns()`.
-   * @param limit - Rows per page.
-   * @yields One row per deposit, withdrawal or payout.
-   */
-  async *allEarnCampaignTransactions(campaignId: number | string, limit = 100): AsyncGenerator<EarnTransaction> {
-    const seen = new Set<string>()
-    let page: EarnTransactionsPage | undefined
-    for (;;) {
-      page = await this.earnCampaignTransactions(campaignId, limit, page)
-      yield* page.transactions
-      if (page.transactions.length < limit) return
-      const cursor = [
-        page.deposit_acc_next_from,
-        page.payout_acc_next_from,
-        page.transfer_request_next_before_datetime
-      ].join('|')
-      if (seen.has(cursor)) throw new Error('earn transactions pagination returned a cursor twice')
-      seen.add(cursor)
-    }
   }
 
   earnRate(from: string, to: string): Promise<EarnRate> {
@@ -294,52 +264,23 @@ export class WaltClient {
   }
 
   /**
-   * The newest orders, one page of them. `allLimitOrders()` returns every order.
+   * Every limit, take-profit and stop-loss order, newest first.
    *
    * @param options - Filters, all optional.
-   * @param options.status - Only orders in these states, such as `OPEN`.
-   * @param options.limit - Most orders to return, 100 at most. The API returns 20 without it.
+   * @param options.statuses - Only orders in these states, such as `OPEN`.
    */
-  async limitOrders(options: { status?: string[]; limit?: number } = {}): Promise<LimitOrder[]> {
-    const { items } = await this.limitOrdersPage(options)
-    return items
-  }
-
-  /**
-   * @param options - Filters, all optional.
-   * @param options.status - Only orders in these states, such as `OPEN`.
-   * @param options.limit - Orders per page, 100 at most. The API returns 20 without it.
-   * @param options.cursor - `next_cursor` of the previous page.
-   */
-  limitOrdersPage(options: { status?: string[]; limit?: number; cursor?: string } = {}): Promise<LimitOrdersPage> {
-    const query = new URLSearchParams()
-    for (const status of options.status ?? []) query.append('status', status)
-    if (options.limit !== undefined) query.set('limit', String(options.limit))
-    if (options.cursor !== undefined) query.set('cursor', options.cursor)
-    const search = query.size === 0 ? '' : `?${query.toString()}`
-    return this.transport.get<LimitOrdersPage>(`/emporos/public-api/orders/limit${search}`)
-  }
-
-  /**
-   * Every order, page by page, newest first.
-   *
-   * @param options - Filters, all optional.
-   * @param options.status - Only orders in these states, such as `OPEN`.
-   * @param options.limit - Orders per page, 100 at most.
-   * @yields One order at a time.
-   */
-  async *allLimitOrders(options: { status?: string[]; limit?: number } = {}): AsyncGenerator<LimitOrder> {
-    const { status = [], limit = 100 } = options
-    const seen = new Set<string>()
-    let cursor: string | undefined
-    for (;;) {
-      const page = await this.limitOrdersPage(cursor === undefined ? { status, limit } : { status, limit, cursor })
-      yield* page.items
-      if (page.items.length === 0 || page.next_cursor == null) return
-      if (seen.has(page.next_cursor)) throw new Error('limit orders pagination returned a cursor twice')
-      seen.add(page.next_cursor)
-      cursor = page.next_cursor
-    }
+  limitOrders(options: { statuses?: string[] } = {}): Promise<LimitOrder[]> {
+    return this.paged<LimitOrdersPage, LimitOrder>(
+      (previous) => {
+        const query = new URLSearchParams()
+        for (const status of options.statuses ?? []) query.append('status', status)
+        query.set('limit', String(LIMIT_ORDERS_PAGE_SIZE))
+        if (previous?.next_cursor !== undefined) query.set('cursor', previous.next_cursor)
+        return this.transport.get<LimitOrdersPage>(`/emporos/public-api/orders/limit?${query.toString()}`)
+      },
+      (page) => page.items,
+      (page) => page.next_cursor ?? null
+    )
   }
 
   limitOrder(id: string): Promise<LimitOrder> {
@@ -425,17 +366,16 @@ export class WaltClient {
    * @param options - Filters, all optional.
    * @param options.contractId - Only this contract.
    * @param options.statuses - Only orders in these states.
-   * @param options.limit - Most orders to return.
    */
-  perpOrders(
-    options: { contractId?: number; statuses?: PerpOrderStatus[]; limit?: number } = {}
-  ): Promise<PerpOrdersPage> {
-    const query = new URLSearchParams()
+  async perpOrders(options: { contractId?: number; statuses?: PerpOrderStatus[] } = {}): Promise<PerpOrder[]> {
+    const query = new URLSearchParams({ limit: String(PERP_ORDERS_PAGE_SIZE) })
     if (options.contractId !== undefined) query.set('contract_id', String(options.contractId))
-    if (options.limit !== undefined) query.set('limit', String(options.limit))
     for (const status of options.statuses ?? []) query.append('statuses', status)
-    const search = query.size === 0 ? '' : `?${query.toString()}`
-    return this.transport.get<PerpOrdersPage>(`/perps/public-api/v2/orders/${search}`)
+    const page = await this.transport.get<PerpOrdersPage>(`/perps/public-api/v2/orders/?${query.toString()}`)
+    if (page.next_cursor != null) {
+      throw new Error(`more than ${PERP_ORDERS_PAGE_SIZE} perp orders, and paging them is not supported`)
+    }
+    return page.orders
   }
 
   /**

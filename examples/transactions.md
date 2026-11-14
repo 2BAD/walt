@@ -1,23 +1,14 @@
 # Transactions
 
 ```ts
-for await (const transaction of client.allTransactions(100)) {
+for (const transaction of await client.transactions()) {
   console.log(transaction.id, transaction.gateway, transaction.amount, transaction.currency)
 }
 
-const tonRows = await Array.fromAsync(client.allAccountTransactions('TON'))
+const tonRows = await client.transactions({ currency: 'TON' })
 ```
 
-## Pages
-
-Stop on an empty page. `next_cursor` is still set after the last one.
-
-```ts
-let page = await client.transactions(50)
-while (page.transactions.length > 0 && page.next_cursor !== null) {
-  page = await client.transactions(50, page.next_cursor)
-}
-```
+Newest first.
 
 ## `transactionDetails()`
 
@@ -32,14 +23,14 @@ Pass the row's `gateway`. Some records, such as `xstocks_dividends`, are a 404 w
 ## `detailsFor()`
 
 ```ts
-for await (const details of client.detailsFor(client.allTransactions(100))) {
+for (const details of await client.detailsFor(await client.transactions())) {
   console.log(details.id, details.fee_amount)
 }
 ```
 
-Takes an array or an async iterable. Results keep the input order.
+Results keep the input order.
 
-A lookup that fails after its retries throws and ends the loop.
+Rejects when a lookup fails after its retries.
 
 ## `normalizeTransaction()`
 

@@ -76,8 +76,7 @@ type WaltClient = {
   frozenBalances<T = unknown>(): Promise<T[]>
 
   earnCampaigns(): Promise<EarnCampaignsResponse>
-  earnCampaignTransactions(campaignId: number | string, limit?: number, after?: EarnTransactionsPage): Promise<EarnTransactionsPage>
-  allEarnCampaignTransactions(campaignId: number | string, limit?: number): AsyncGenerator<EarnTransaction>
+  earnCampaignTransactions(campaignId: number): Promise<EarnTransaction[]>
   earnRate(from: string, to: string): Promise<EarnRate>
 
   coins(fiatCurrency: FiatCurrency): Promise<Coin[]>
@@ -91,9 +90,7 @@ type WaltClient = {
   quote(fromCurrency: string, toCurrency: string, fromAmount: number): Promise<ExchangeQuote>
   createExchange(request: ExchangeRequest): Promise<Exchange> // moves real money, never retried
 
-  limitOrders(options?: { status?: string[]; limit?: number }): Promise<LimitOrder[]>
-  limitOrdersPage(options?: { status?: string[]; limit?: number; cursor?: string }): Promise<LimitOrdersPage>
-  allLimitOrders(options?: { status?: string[]; limit?: number }): AsyncGenerator<LimitOrder>
+  limitOrders(options?: { statuses?: string[] }): Promise<LimitOrder[]>
   limitOrder(id: string): Promise<LimitOrder>
   limitOrderQuote(baseCurrency: string, side: 'BUY' | 'SELL', priceLimit: number | string, size: { amount: number | string } | { quantity: number | string }): Promise<LimitOrderQuote>
   limitOrderBounds(baseCurrency: string): Promise<LimitOrderBounds>
@@ -105,19 +102,18 @@ type WaltClient = {
   perpContracts(contractId?: number): Promise<PerpContract[]>
   perpSystemStatus(): Promise<PerpSystemStatus>
   perpPositions(options?: { statuses?: PerpPositionStatus[]; contractId?: number }): Promise<PerpPosition[]>
-  perpOrders(options?: { contractId?: number; statuses?: PerpOrderStatus[]; limit?: number }): Promise<PerpOrdersPage>
+  perpOrders(options?: { contractId?: number; statuses?: PerpOrderStatus[] }): Promise<PerpOrder[]>
 
-  transactions(limit?: number, cursor?: string): Promise<TransactionsPage>
-  accountTransactions(currency: string, limit?: number, cursor?: string): Promise<TransactionsPage>
-  allTransactions(limit?: number): AsyncGenerator<Transaction>
-  allAccountTransactions(currency: string, limit?: number): AsyncGenerator<Transaction>
+  transactions(options?: { currency?: string }): Promise<Transaction[]>
   transactionDetails(id: number | string, gateway?: TransactionGateway): Promise<TransactionDetails>
-  detailsFor(transactions: AsyncIterable<Transaction> | Iterable<Transaction>): AsyncGenerator<TransactionDetails>
-  unconfirmedTransactions<T = unknown>(limit?: number): Promise<{ transactions: T[]; size: number }>
+  detailsFor(transactions: Transaction[]): Promise<TransactionDetails[]>
+  unconfirmedTransactions<T = unknown>(): Promise<T[]>
 }
 
 function normalizeTransaction(details: TransactionDetails): NormalizedTransaction
 ```
+
+Methods that return a list return every entry.
 
 Response fields keep the API's `snake_case`. Amounts are decimal strings, except in the exchange responses.
 

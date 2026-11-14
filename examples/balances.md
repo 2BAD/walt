@@ -48,17 +48,15 @@ const joined = campaigns.filter((campaign) => campaign.account !== null)
 
 `earnRate()` prices staking assets that `coins()` does not, such as `USDe`.
 
-`allEarnCampaignTransactions()` lists every deposit, withdrawal and payout in one campaign, newest first.
+`earnCampaignTransactions()` lists every deposit, withdrawal and payout in one campaign, newest first.
 
 ```ts
 for (const campaign of joined) {
-  for await (const row of client.allEarnCampaignTransactions(campaign.campaign_id)) {
+  for (const row of await client.earnCampaignTransactions(campaign.campaign_id)) {
     console.log(campaign.name, row.date, row.direction, row.amount) // TON Staking 2026-01-02T07:00:00Z deposit 0.0041
   }
 }
 ```
-
-`earnCampaignTransactions()` returns one page. Pass the previous page as `after` to get the next one.
 
 ## IPO subscriptions
 

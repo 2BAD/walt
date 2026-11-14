@@ -11,7 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added `ipos()` and `ipo()` to read the listed IPOs and your subscription order in each
 - Added the `abacus_tid` field to `Transaction` and `TransactionDetails`
-- Added `allLimitOrders()` and `limitOrdersPage()` to read limit orders past the first page
+
+### Changed
+
+- **Breaking:** `transactions()`, `limitOrders()`, `perpOrders()` and `earnCampaignTransactions()` now return every entry as an array. Drop the `limit` and `cursor` arguments.
+- **Breaking:** `transactions()` now takes `{ currency }` in place of `accountTransactions()`. Call `transactions({ currency: 'TON' })` instead.
+- **Breaking:** `limitOrders()` now filters by `statuses` instead of `status`. Rename the option.
+- **Breaking:** `detailsFor()` now takes an array and returns an array. Await it instead of iterating with `for await`.
+- **Breaking:** `unconfirmedTransactions()` now returns the rows as an array. Drop the `limit` argument.
+
+### Removed
+
+- **Breaking:** Removed `allTransactions()`, `allAccountTransactions()` and `allEarnCampaignTransactions()`. Use `transactions()` and `earnCampaignTransactions()`.
+- **Breaking:** Removed the `TransactionsPage`, `LimitOrdersPage`, `PerpOrdersPage` and `EarnTransactionsPage` types.
 
 ### Fixed
 
