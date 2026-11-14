@@ -25,6 +25,6 @@ if (error instanceof WaltRequestError) console.log(error.body) // { code: 'marke
 
 429, 502, 503, 504 and network failures are retried.
 
-A 500 is not retried. It means a bad request, such as a malformed cursor.
+A 500 is not retried.
 
 `createExchange()` is never retried.
