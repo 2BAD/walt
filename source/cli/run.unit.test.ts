@@ -327,6 +327,19 @@ describe('orders', () => {
 
     expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('https://walletbot.me/emporos/public-api/orders/limit?limit=100')
   })
+
+  it('lists the orders past the first page with --all', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async (input) =>
+      jsonResponse(String(input).includes('cursor=') ? { items: [order] } : { items: [order], next_cursor: 'cursor-2' })
+    )
+    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
+    const lines = (await run(client, 'orders', [], { all: true })).split('\n')
+
+    expect(lines).toHaveLength(4)
+    expect(String(fetchImpl.mock.calls[1]?.[0])).toContain('limit=100&cursor=cursor-2')
+  })
 })
 
 describe('perps', () => {

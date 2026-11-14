@@ -39,7 +39,13 @@ export type {
 } from '~/api/earn.ts'
 export type { AvailableExchanges, Exchange, ExchangeQuote, ExchangeRequest } from '~/api/exchange.ts'
 export type { Ipo, IpoDetails, IpoOrder, IpoStep } from '~/api/ipo.ts'
-export type { LimitOrder, LimitOrderBounds, LimitOrderQuote, LimitOrderToken } from '~/api/limit-orders.ts'
+export type {
+  LimitOrder,
+  LimitOrderBounds,
+  LimitOrderQuote,
+  LimitOrdersPage,
+  LimitOrderToken
+} from '~/api/limit-orders.ts'
 export type {
   PerpContract,
   PerpOrder,

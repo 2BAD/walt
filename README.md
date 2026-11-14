@@ -92,6 +92,8 @@ type WaltClient = {
   createExchange(request: ExchangeRequest): Promise<Exchange> // moves real money, never retried
 
   limitOrders(options?: { status?: string[]; limit?: number }): Promise<LimitOrder[]>
+  limitOrdersPage(options?: { status?: string[]; limit?: number; cursor?: string }): Promise<LimitOrdersPage>
+  allLimitOrders(options?: { status?: string[]; limit?: number }): AsyncGenerator<LimitOrder>
   limitOrder(id: string): Promise<LimitOrder>
   limitOrderQuote(baseCurrency: string, side: 'BUY' | 'SELL', priceLimit: number | string, size: { amount: number | string } | { quantity: number | string }): Promise<LimitOrderQuote>
   limitOrderBounds(baseCurrency: string): Promise<LimitOrderBounds>

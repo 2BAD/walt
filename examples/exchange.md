@@ -50,4 +50,14 @@ Size an order by `amount` to spend or by `quantity` to receive.
 const open = await client.limitOrders({ status: ['OPEN'] })
 ```
 
+`limitOrders()` returns the newest 20 orders, or up to 100 with `limit`. `allLimitOrders()` returns every order.
+
+```ts
+for await (const order of client.allLimitOrders({ status: ['FILLED'] })) {
+  console.log(order.base_currency, order.execution?.price) // NVDAx 170.00
+}
+```
+
+`limitOrdersPage()` returns one page. Pass its `next_cursor` as `cursor` to get the next one.
+
 Filled orders carry `execution` with the fill price and amounts.

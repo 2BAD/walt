@@ -611,6 +611,59 @@ describe('waltClient limit orders', () => {
     )
   })
 
+  it('asks for the page after a cursor and returns the next one', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ items: [{ id: 'order-1' }], next_cursor: 'cursor+2=' })
+    )
+    const page = await makeClient(fetchImpl).limitOrdersPage({ status: ['FILLED'], limit: 1, cursor: 'cursor+1=' })
+
+    expect(page.next_cursor).toBe('cursor+2=')
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      'https://walletbot.me/emporos/public-api/orders/limit?status=FILLED&limit=1&cursor=cursor%2B1%3D'
+    )
+  })
+
+  it('walks every page of orders until one comes without a cursor', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ items: [{ id: 'order-1' }, { id: 'order-2' }], next_cursor: 'cursor-2' }))
+      .mockResolvedValueOnce(jsonResponse({ items: [{ id: 'order-3' }] }))
+    const orders = await Array.fromAsync(makeClient(fetchImpl).allLimitOrders({ status: ['OPEN'] }))
+
+    expect(orders.map((order) => order.id)).toStrictEqual(['order-1', 'order-2', 'order-3'])
+    expect(fetchImpl.mock.calls.map(([url]) => String(url))).toStrictEqual([
+      'https://walletbot.me/emporos/public-api/orders/limit?status=OPEN&limit=100',
+      'https://walletbot.me/emporos/public-api/orders/limit?status=OPEN&limit=100&cursor=cursor-2'
+    ])
+  })
+
+  it('stops walking orders at an empty page that still carries a cursor', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ items: [{ id: 'order-1' }], next_cursor: 'cursor-2' }))
+      .mockResolvedValueOnce(jsonResponse({ items: [], next_cursor: 'cursor-3' }))
+    const orders = await Array.fromAsync(makeClient(fetchImpl).allLimitOrders({ limit: 1 }))
+
+    expect(orders).toHaveLength(1)
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('throws instead of looping when the order list repeats a cursor', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ items: [{ id: 'order-1' }], next_cursor: 'cursor-2' })
+    )
+
+    await expect(Array.fromAsync(makeClient(fetchImpl).allLimitOrders())).rejects.toThrow('returned a cursor twice')
+  })
+
   it('fetches one order by id', async () => {
     expect.assertions(1)
 

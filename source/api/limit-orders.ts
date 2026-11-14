@@ -23,6 +23,13 @@ export type LimitOrder = {
   execution?: { filled_quantity: string; filled_quote_amount: string; price: string }
 }
 
+export type LimitOrdersPage = {
+  /** Newest first. */
+  items: LimitOrder[]
+  /** Absent on the last page. */
+  next_cursor?: string
+}
+
 export type LimitOrderQuote = {
   base_currency: string
   side: string

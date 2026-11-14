@@ -5,7 +5,13 @@ import type { CandleRequest, CandleSeries } from '~/api/candles.ts'
 import type { EarnCampaignsResponse, EarnRate, EarnTransaction, EarnTransactionsPage } from '~/api/earn.ts'
 import type { AvailableExchanges, Exchange, ExchangeQuote, ExchangeRequest } from '~/api/exchange.ts'
 import type { Ipo, IpoDetails } from '~/api/ipo.ts'
-import type { LimitOrder, LimitOrderBounds, LimitOrderQuote, LimitOrderToken } from '~/api/limit-orders.ts'
+import type {
+  LimitOrder,
+  LimitOrderBounds,
+  LimitOrderQuote,
+  LimitOrdersPage,
+  LimitOrderToken
+} from '~/api/limit-orders.ts'
 import type {
   PerpContract,
   PerpOrdersPage,
@@ -288,17 +294,52 @@ export class WaltClient {
   }
 
   /**
+   * The newest orders, one page of them. `allLimitOrders()` returns every order.
+   *
    * @param options - Filters, all optional.
    * @param options.status - Only orders in these states, such as `OPEN`.
-   * @param options.limit - Most orders to return.
+   * @param options.limit - Most orders to return, 100 at most. The API returns 20 without it.
    */
   async limitOrders(options: { status?: string[]; limit?: number } = {}): Promise<LimitOrder[]> {
+    const { items } = await this.limitOrdersPage(options)
+    return items
+  }
+
+  /**
+   * @param options - Filters, all optional.
+   * @param options.status - Only orders in these states, such as `OPEN`.
+   * @param options.limit - Orders per page, 100 at most. The API returns 20 without it.
+   * @param options.cursor - `next_cursor` of the previous page.
+   */
+  limitOrdersPage(options: { status?: string[]; limit?: number; cursor?: string } = {}): Promise<LimitOrdersPage> {
     const query = new URLSearchParams()
     for (const status of options.status ?? []) query.append('status', status)
     if (options.limit !== undefined) query.set('limit', String(options.limit))
+    if (options.cursor !== undefined) query.set('cursor', options.cursor)
     const search = query.size === 0 ? '' : `?${query.toString()}`
-    const { items } = await this.transport.get<{ items: LimitOrder[] }>(`/emporos/public-api/orders/limit${search}`)
-    return items
+    return this.transport.get<LimitOrdersPage>(`/emporos/public-api/orders/limit${search}`)
+  }
+
+  /**
+   * Every order, page by page, newest first.
+   *
+   * @param options - Filters, all optional.
+   * @param options.status - Only orders in these states, such as `OPEN`.
+   * @param options.limit - Orders per page, 100 at most.
+   * @yields One order at a time.
+   */
+  async *allLimitOrders(options: { status?: string[]; limit?: number } = {}): AsyncGenerator<LimitOrder> {
+    const { status = [], limit = 100 } = options
+    const seen = new Set<string>()
+    let cursor: string | undefined
+    for (;;) {
+      const page = await this.limitOrdersPage(cursor === undefined ? { status, limit } : { status, limit, cursor })
+      yield* page.items
+      if (page.items.length === 0 || page.next_cursor == null) return
+      if (seen.has(page.next_cursor)) throw new Error('limit orders pagination returned a cursor twice')
+      seen.add(page.next_cursor)
+      cursor = page.next_cursor
+    }
   }
 
   limitOrder(id: string): Promise<LimitOrder> {
