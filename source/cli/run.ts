@@ -257,7 +257,9 @@ const quote = async (client: WaltClient, args: string[]): Promise<Report> => {
 
 const orders = async (client: WaltClient, options: CliOptions): Promise<Report> => {
   const list = await Array.fromAsync(client.allLimitOrders(options.all ? {} : { status: ['OPEN', 'CANCELLING'] }))
-  const held = list.filter((order) => order.status === 'OPEN').reduce((sum, order) => sum + Number(order.total), 0)
+  const held = list
+    .filter((order) => order.status === 'OPEN' && order.side === 'BUY')
+    .reduce((sum, order) => sum + Number(order.total), 0)
   return {
     columns: [
       { key: 'created', title: 'CREATED (UTC)' },

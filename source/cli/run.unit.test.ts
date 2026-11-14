@@ -319,6 +319,17 @@ describe('orders', () => {
     expect(lines[2]).toBe('50.00 USDT held by open orders')
   })
 
+  it('leaves an open sell order out of the USDT held', async () => {
+    expect.assertions(2)
+
+    const sell = { ...order, base_currency: 'TON', side: 'SELL', total: '30' }
+    const { client } = clientFor({ '/emporos/public-api/orders/limit': { items: [order, sell] } })
+    const lines = (await run(client, 'orders', [])).split('\n')
+
+    expect(lines[2]).toContain('TON    SELL')
+    expect(lines[3]).toBe('50.00 USDT held by open orders')
+  })
+
   it('lists every order with --all', async () => {
     expect.assertions(1)
 
