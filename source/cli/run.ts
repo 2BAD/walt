@@ -212,7 +212,7 @@ const quote = async (client: WaltClient, args: string[]): Promise<Report> => {
   let rejection: unknown
   for (const candidate of quoteSizes(amount)) {
     try {
-      result = await client.quote(from, to, Number(candidate))
+      result = await client.exchangeQuote({ from_currency: from, to_currency: to, from_amount: Number(candidate) })
       size = candidate
       break
     } catch (error) {
@@ -323,7 +323,7 @@ const perps = async (client: WaltClient, options: CliOptions): Promise<Report> =
 }
 
 const earn = async (client: WaltClient, options: CliOptions): Promise<Report> => {
-  const { campaigns } = await client.earnCampaigns()
+  const campaigns = await client.earnCampaigns()
   const shown = campaigns.filter((campaign) =>
     options.all ? campaign.status === 'active' : campaign.account !== null && Number(campaign.account.balance) > 0
   )

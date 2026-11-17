@@ -81,14 +81,6 @@ export type EarnCampaign = {
   is_deposit_limit_exceeded: boolean
 }
 
-export type EarnCampaignsResponse = {
-  campaigns: EarnCampaign[]
-  required_kyc_level: string
-  ab_tests: Record<string, unknown>
-  tooltip_campaign_id: number | null
-  total_participants: number
-}
-
 export type EarnTransaction = {
   id: number
   transaction_type: string

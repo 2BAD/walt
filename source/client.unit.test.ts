@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Transaction } from '~/api/transactions.ts'
 import { WaltClient } from '~/client.ts'
 import { WaltAuthError, WaltRequestError } from '~/transport.ts'
 
@@ -247,15 +246,6 @@ describe('waltClient', () => {
     )
   })
 
-  it('requests the frozen balances endpoint', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}))
-    await makeClient(fetchImpl).frozenBalances()
-
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/accounts/frozen')
-  })
-
   it('scopes transactions to one currency', async () => {
     expect.assertions(1)
 
@@ -346,16 +336,6 @@ describe('waltClient', () => {
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
       'https://walletbot.me/api/v1/transactions/details/10000000000001/?transaction_gateway=crypto_exchange'
     )
-  })
-
-  it('reads pending deposits', async () => {
-    expect.assertions(2)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ transactions: [], size: 0 }))
-    const rows = await makeClient(fetchImpl).unconfirmedTransactions()
-
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/transactions/unconfirmed/?limit=1000')
-    expect(rows).toStrictEqual([])
   })
 
   it('reads profit and loss from the analytics service', async () => {
@@ -468,7 +448,7 @@ describe('waltClient earn', () => {
     expect.assertions(2)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ campaigns: [] }))
-    const { campaigns } = await makeClient(fetchImpl).earnCampaigns()
+    const campaigns = await makeClient(fetchImpl).earnCampaigns()
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/earn/public-api/v1/campaigns/')
     expect(campaigns).toStrictEqual([])
@@ -710,7 +690,7 @@ describe('waltClient perps', () => {
     expect.assertions(1)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ contracts: [] }))
-    await makeClient(fetchImpl).perpContracts(111)
+    await makeClient(fetchImpl).perpContracts({ contractId: 111 })
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/perps/public-api/v1/contracts/?contract_id=111')
   })
@@ -784,89 +764,6 @@ describe('waltClient candles', () => {
   })
 })
 
-describe('waltClient detailsFor', () => {
-  const rows = (count: number) =>
-    Array.from({ length: count }, (_, index) => ({ id: 10000000000001 + index }) as Transaction)
-
-  const detailFetch = (onCall?: (id: string) => void) =>
-    vi.fn<typeof fetch>(async (input) => {
-      const id = String(input).split('/details/')[1]?.replace(/\/$/, '') ?? ''
-      onCall?.(id)
-      return jsonResponse({ id: Number(id), gateway: 'crypto_exchange' })
-    })
-
-  it('returns one detail per row, in the order of the rows', async () => {
-    expect.assertions(1)
-
-    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: detailFetch() })
-    const details = await client.detailsFor(rows(9))
-
-    expect(details.map((detail) => detail.id)).toStrictEqual([
-      10000000000001, 10000000000002, 10000000000003, 10000000000004, 10000000000005, 10000000000006, 10000000000007,
-      10000000000008, 10000000000009
-    ])
-  })
-
-  it('passes each row gateway through, which xstocks_dividends needs to resolve', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = detailFetch()
-    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
-    await client.detailsFor([{ id: 10000000000001, gateway: 'xstocks_dividends' } as Transaction])
-
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
-      'https://walletbot.me/api/v1/transactions/details/10000000000001/?transaction_gateway=xstocks_dividends'
-    )
-  })
-
-  it('keeps maxConcurrent lookups in flight', async () => {
-    expect.assertions(1)
-
-    let inFlight = 0
-    let peak = 0
-    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
-      inFlight++
-      peak = Math.max(peak, inFlight)
-      await new Promise((resolve) => setTimeout(resolve, 0))
-      inFlight--
-      const id = String(input).split('/details/')[1]?.replace(/\/$/, '') ?? ''
-      return jsonResponse({ id: Number(id) })
-    })
-
-    const client = new WaltClient({
-      tokenProvider: async () => 'jwt.token.value',
-      fetch: fetchImpl,
-      maxConcurrent: 4
-    })
-    await client.detailsFor(rows(12))
-
-    expect(peak).toBe(4)
-  })
-
-  it('rejects when a lookup keeps failing, with no unhandled rejection from the others', async () => {
-    expect.assertions(2)
-
-    const rejections: unknown[] = []
-    const onRejection = (reason: unknown) => rejections.push(reason)
-    process.on('unhandledRejection', onRejection)
-
-    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
-      if (String(input).includes('10000000000001')) {
-        await new Promise((resolve) => setTimeout(resolve, 20))
-        return jsonResponse({ id: 1 })
-      }
-      return jsonResponse({}, 400)
-    })
-    const client = new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
-
-    await expect(client.detailsFor(rows(3))).rejects.toThrow('failed (400)')
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    process.off('unhandledRejection', onRejection)
-
-    expect(rejections).toStrictEqual([])
-  })
-})
-
 describe('waltClient exchange', () => {
   const quoteResponse = {
     from_amount: 1,
@@ -890,11 +787,18 @@ describe('waltClient exchange', () => {
     expect(pairs).toStrictEqual({ BTC: ['TON', 'USDT'] })
   })
 
-  it('posts a quote as json', async () => {
+  it('posts only the amount and currencies of an exchange request as a quote', async () => {
     expect.assertions(3)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(quoteResponse))
-    await makeClient(fetchImpl).quote('USDT', 'XLEx', 1)
+    const request = {
+      from_currency: 'USDT',
+      to_currency: 'XLEx',
+      from_amount: 1,
+      local_currency: 'USD' as const,
+      max_amount: true
+    }
+    await makeClient(fetchImpl).exchangeQuote(request)
     const [url, options] = fetchImpl.mock.calls[0] ?? []
 
     expect(url).toContain('/api/v1/exchange/convert/')
@@ -931,7 +835,9 @@ describe('waltClient exchange', () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => responses.shift() ?? jsonResponse({}, 500))
     const client = new WaltClient({ tokenProvider: async () => 'jwt', fetch: fetchImpl, retryDelayMs: 0 })
 
-    await expect(client.quote('USDT', 'XLEx', 0)).resolves.toStrictEqual(quoteResponse)
+    await expect(
+      client.exchangeQuote({ from_currency: 'USDT', to_currency: 'XLEx', from_amount: 0 })
+    ).resolves.toStrictEqual(quoteResponse)
     expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 

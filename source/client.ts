@@ -2,7 +2,7 @@ import type { AccountsResponse, Charts, Coin, CoinDetails, FiatCurrency, PriceAt
 import type { PnlResponse, PortfolioHistory } from '~/api/analytics.ts'
 import type { Balances } from '~/api/balances.ts'
 import type { CandleRequest, CandleSeries } from '~/api/candles.ts'
-import type { EarnCampaignsResponse, EarnRate, EarnTransaction, EarnTransactionsPage } from '~/api/earn.ts'
+import type { EarnCampaign, EarnRate, EarnTransaction, EarnTransactionsPage } from '~/api/earn.ts'
 import type { AvailableExchanges, Exchange, ExchangeQuote, ExchangeRequest } from '~/api/exchange.ts'
 import type { Ipo, IpoDetails } from '~/api/ipo.ts'
 import type {
@@ -170,15 +170,6 @@ export class WaltClient {
   }
 
   /**
-   * `transactionDetails()` for each listing row, in the same order. Lookups run concurrently up to `maxConcurrent`.
-   *
-   * @param transactions - Listing rows, typically from `transactions()`.
-   */
-  detailsFor(transactions: Transaction[]): Promise<TransactionDetails[]> {
-    return Promise.all(transactions.map((row) => this.transactionDetails(row.id, row.gateway)))
-  }
-
-  /**
    * @param id - Transaction id from a listing row.
    * @param gateway - The row's `gateway`. Some records, such as `xstocks_dividends`, 404 without it.
    */
@@ -189,21 +180,10 @@ export class WaltClient {
     )
   }
 
-  async unconfirmedTransactions<T = unknown>(): Promise<T[]> {
-    const query = new URLSearchParams({ limit: String(TRANSACTIONS_PAGE_SIZE) })
-    const { transactions } = await this.transport.get<{ transactions: T[] }>(
-      `/api/v1/transactions/unconfirmed/?${query.toString()}`
-    )
-    return transactions
-  }
-
-  frozenBalances<T = unknown>(): Promise<T[]> {
-    return this.transport.get<T[]>('/api/v1/accounts/frozen')
-  }
-
   /** Every earn campaign. Staked balances are here, not in `accounts()`. */
-  earnCampaigns(): Promise<EarnCampaignsResponse> {
-    return this.transport.get<EarnCampaignsResponse>('/earn/public-api/v1/campaigns/')
+  async earnCampaigns(): Promise<EarnCampaign[]> {
+    const { campaigns } = await this.transport.get<{ campaigns: EarnCampaign[] }>('/earn/public-api/v1/campaigns/')
+    return campaigns
   }
 
   /**
@@ -332,10 +312,15 @@ export class WaltClient {
     return this.transport.get<IpoDetails>(`/api/v1/ipo/info/${encodeURIComponent(String(id))}/`)
   }
 
-  /** @param contractId - Only this contract. */
-  async perpContracts(contractId?: number): Promise<PerpContract[]> {
+  /**
+   * @param options - Filters, all optional.
+   * @param options.contractId - Only this contract.
+   */
+  async perpContracts(options: { contractId?: number } = {}): Promise<PerpContract[]> {
     const query =
-      contractId === undefined ? '' : `?${new URLSearchParams({ contract_id: String(contractId) }).toString()}`
+      options.contractId === undefined
+        ? ''
+        : `?${new URLSearchParams({ contract_id: String(options.contractId) }).toString()}`
     const { contracts } = await this.transport.get<{ contracts: PerpContract[] }>(
       `/perps/public-api/v1/contracts/${query}`
     )
@@ -425,15 +410,15 @@ export class WaltClient {
   /**
    * Executable rate, spread included, unlike the display rates.
    *
-   * @param fromCurrency - What is paid.
-   * @param toCurrency - What is received.
-   * @param fromAmount - Amount of `fromCurrency`; `0` returns the rate and limits only.
+   * @param request - The exchange as `createExchange()` takes it. A `from_amount` of `0` returns the rate and limits only.
    */
-  quote(fromCurrency: string, toCurrency: string, fromAmount: number): Promise<ExchangeQuote> {
+  exchangeQuote(
+    request: Pick<ExchangeRequest, 'from_currency' | 'to_currency' | 'from_amount'>
+  ): Promise<ExchangeQuote> {
     return this.transport.post<ExchangeQuote>('/api/v1/exchange/convert/', {
-      from_amount: fromAmount,
-      from_currency: fromCurrency,
-      to_currency: toCurrency
+      from_amount: request.from_amount,
+      from_currency: request.from_currency,
+      to_currency: request.to_currency
     })
   }
 

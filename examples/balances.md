@@ -41,7 +41,7 @@ To leave out staked positions, keep the rows whose `account_type` is `bank_accou
 ## Staked funds
 
 ```ts
-const { campaigns } = await client.earnCampaigns()
+const campaigns = await client.earnCampaigns()
 const joined = campaigns.filter((campaign) => campaign.account !== null)
 // joined[0].account.balance  '50.000000'
 ```
@@ -83,11 +83,3 @@ for (const period of chart.data_points) {
 ```
 
 `total_period_details` sums the whole range.
-
-## Frozen and unconfirmed
-
-No rows have been seen for `frozenBalances()` or `unconfirmedTransactions()`. Pass your own row type.
-
-```ts
-const frozen = await client.frozenBalances<{ currency: string; amount: string }>()
-```

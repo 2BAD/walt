@@ -29,7 +29,6 @@ export type {
   EarnAmount,
   EarnBonus,
   EarnCampaign,
-  EarnCampaignsResponse,
   EarnDepegInfo,
   EarnInterestRate,
   EarnPayoutPool,

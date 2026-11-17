@@ -20,17 +20,14 @@ const details = await client.transactionDetails(row.id, row.gateway)
 
 Pass the row's `gateway`. Some records, such as `xstocks_dividends`, are a 404 without it.
 
-## `detailsFor()`
+## Details for many rows
 
 ```ts
-for (const details of await client.detailsFor(await client.transactions())) {
-  console.log(details.id, details.fee_amount)
-}
+const rows = await client.transactions()
+const details = await Promise.all(rows.map((row) => client.transactionDetails(row.id, row.gateway)))
 ```
 
-Results keep the input order.
-
-Rejects when a lookup fails after its retries.
+The client runs at most `maxConcurrent` lookups at once.
 
 ## `normalizeTransaction()`
 

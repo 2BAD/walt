@@ -17,13 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** `transactions()`, `limitOrders()`, `perpOrders()` and `earnCampaignTransactions()` now return every entry as an array. Drop the `limit` and `cursor` arguments.
 - **Breaking:** `transactions()` now takes `{ currency }` in place of `accountTransactions()`. Call `transactions({ currency: 'TON' })` instead.
 - **Breaking:** `limitOrders()` now filters by `statuses` instead of `status`. Rename the option.
-- **Breaking:** `detailsFor()` now takes an array and returns an array. Await it instead of iterating with `for await`.
-- **Breaking:** `unconfirmedTransactions()` now returns the rows as an array. Drop the `limit` argument.
+- **Breaking:** `earnCampaigns()` now returns the campaigns as an array. Drop the `campaigns` destructuring.
+- **Breaking:** `perpContracts()` now takes `{ contractId }` instead of a bare id. Wrap the id in an object.
+- **Breaking:** Renamed `quote()` to `exchangeQuote()`, which takes the fields `createExchange()` takes. Pass `{ from_currency, to_currency, from_amount }`.
 
 ### Removed
 
 - **Breaking:** Removed `allTransactions()`, `allAccountTransactions()` and `allEarnCampaignTransactions()`. Use `transactions()` and `earnCampaignTransactions()`.
-- **Breaking:** Removed the `TransactionsPage`, `LimitOrdersPage`, `PerpOrdersPage` and `EarnTransactionsPage` types.
+- **Breaking:** Removed the `TransactionsPage`, `LimitOrdersPage`, `PerpOrdersPage`, `EarnTransactionsPage` and `EarnCampaignsResponse` types.
+- **Breaking:** Removed `detailsFor()`. Call `transactionDetails()` for each row with `Promise.all`.
+- **Breaking:** Removed `frozenBalances()` and `unconfirmedTransactions()`, whose row shape was never known.
 
 ### Fixed
 

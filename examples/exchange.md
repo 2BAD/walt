@@ -1,18 +1,22 @@
 # Exchange
 
 ```ts
-const { rate, min_amount, max_amount } = await client.quote('USDT', 'NVDAx', 0)
+const { rate, min_amount, max_amount } = await client.exchangeQuote({
+  from_currency: 'USDT',
+  to_currency: 'NVDAx',
+  from_amount: 0
+})
 ```
 
 ## Pairs
 
 `availableExchanges()` lists the pairs the app offers. Unlisted pairs can still work. Request a quote to find out.
 
-## `quote()`
+## `exchangeQuote()`
 
 `rate` is the price you would get, spread included. Use it for price triggers instead of the rate from `coins()`.
 
-`fromAmount` must be between `min_amount` and `max_amount`. When selling, `max_amount` is your balance.
+`from_amount` must be between `min_amount` and `max_amount`. When selling, `max_amount` is your balance.
 
 Pass `0` to get the rate and limits alone.
 

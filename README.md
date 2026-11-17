@@ -73,9 +73,8 @@ type WaltClient = {
   balances(fiatCurrency: FiatCurrency): Promise<Balances>
   pnl(): Promise<PnlResponse>
   portfolioHistory(dateFrom: Date | string, resolution: '1d' | '1m'): Promise<PortfolioHistory>
-  frozenBalances<T = unknown>(): Promise<T[]>
 
-  earnCampaigns(): Promise<EarnCampaignsResponse>
+  earnCampaigns(): Promise<EarnCampaign[]>
   earnCampaignTransactions(campaignId: number): Promise<EarnTransaction[]>
   earnRate(from: string, to: string): Promise<EarnRate>
 
@@ -87,7 +86,7 @@ type WaltClient = {
   candles(requests: CandleRequest[]): Promise<CandleSeries[]>
 
   availableExchanges(): Promise<AvailableExchanges>
-  quote(fromCurrency: string, toCurrency: string, fromAmount: number): Promise<ExchangeQuote>
+  exchangeQuote(request: Pick<ExchangeRequest, 'from_currency' | 'to_currency' | 'from_amount'>): Promise<ExchangeQuote>
   createExchange(request: ExchangeRequest): Promise<Exchange> // moves real money, never retried
 
   limitOrders(options?: { statuses?: string[] }): Promise<LimitOrder[]>
@@ -99,15 +98,13 @@ type WaltClient = {
   ipos(): Promise<Ipo[]>
   ipo(id: number): Promise<IpoDetails>
 
-  perpContracts(contractId?: number): Promise<PerpContract[]>
+  perpContracts(options?: { contractId?: number }): Promise<PerpContract[]>
   perpSystemStatus(): Promise<PerpSystemStatus>
   perpPositions(options?: { statuses?: PerpPositionStatus[]; contractId?: number }): Promise<PerpPosition[]>
   perpOrders(options?: { contractId?: number; statuses?: PerpOrderStatus[] }): Promise<PerpOrder[]>
 
   transactions(options?: { currency?: string }): Promise<Transaction[]>
   transactionDetails(id: number | string, gateway?: TransactionGateway): Promise<TransactionDetails>
-  detailsFor(transactions: Transaction[]): Promise<TransactionDetails[]>
-  unconfirmedTransactions<T = unknown>(): Promise<T[]>
 }
 
 function normalizeTransaction(details: TransactionDetails): NormalizedTransaction
