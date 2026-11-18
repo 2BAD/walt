@@ -1,6 +1,7 @@
 import { Api, errors, TelegramClient } from 'teleproto'
 import { StringSession } from 'teleproto/sessions/index.js'
 import { RefreshTokenSource, type TokenStorage } from '~/refresh.ts'
+import { WaltAuthError } from '~/transport.ts'
 import { defaultTokenPath, fileTokenStorage } from '~/telegram/file-storage.ts'
 
 const MAX_FLOOD_WAIT_MS = 60_000
@@ -74,14 +75,16 @@ export class TelegramTokenSource extends RefreshTokenSource {
       if (!retryAfterFlood || !(error instanceof errors.FloodWaitError)) throw error
       const waitMs = error.seconds * 1000
       if (waitMs > this.maxFloodWaitMs) {
-        throw new Error(`telegram rate limited for ${error.seconds}s, above maxFloodWaitMs of ${this.maxFloodWaitMs}`)
+        throw new WaltAuthError(
+          `telegram rate limited for ${error.seconds}s, above maxFloodWaitMs of ${this.maxFloodWaitMs}`
+        )
       }
       await sleep(waitMs)
       return this.requestInitData(false)
     }
 
     const initData = new URLSearchParams(new URL(result.url).hash.slice(1)).get('tgWebAppData')
-    if (!initData) throw new Error('no tgWebAppData in web view url')
+    if (!initData) throw new WaltAuthError('no tgWebAppData in web view url')
     return initData
   }
 

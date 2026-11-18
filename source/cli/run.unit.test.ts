@@ -1,17 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { FiatCurrency } from '~/api/accounts.ts'
 import { run, UsageError } from '~/cli/run.ts'
 import { WaltClient } from '~/client.ts'
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
-const clientFor = (routes: Record<string, unknown>) => {
+const clientFor = (routes: Record<string, unknown>, fiatCurrency: FiatCurrency = 'USD') => {
   const fetchImpl = vi.fn<typeof fetch>(async (input) => {
     const url = String(input)
     const match = Object.keys(routes).find((path) => url.includes(path))
     return match === undefined ? jsonResponse({ detail: 'not found' }, 404) : jsonResponse(routes[match])
   })
-  return { client: new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl }), fetchImpl }
+  return {
+    client: new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl, fiatCurrency }),
+    fetchImpl
+  }
 }
 
 const account = (account_type: string, currency: string, total: string, fiat: string) => ({
@@ -77,11 +81,11 @@ describe('balances', () => {
     expect(rows[0]).toStrictEqual({ asset: 'USDT', kind: 'orders', amount: '200', value: '200.00', share: '50.0%' })
   })
 
-  it('asks for the requested fiat currency', async () => {
+  it('asks for the fiat currency of the client', async () => {
     expect.assertions(1)
 
-    const { client, fetchImpl } = clientFor(routes)
-    await run(client, 'balances', [], { fiat: 'eur' })
+    const { client, fetchImpl } = clientFor(routes, 'EUR')
+    await run(client, 'balances', [])
 
     expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('fiat_currency=EUR')
   })

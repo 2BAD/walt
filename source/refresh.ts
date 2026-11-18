@@ -1,5 +1,5 @@
 import { BROWSER_HEADERS } from '~/browser.ts'
-import { WaltAuthError } from '~/transport.ts'
+import { WaltAuthError, WaltRequestError } from '~/transport.ts'
 
 const BASE_URL = 'https://walletbot.me'
 const AUTH_URL = 'https://alectryon.walletbot.me'
@@ -38,17 +38,8 @@ export type AuthResponse = {
   access_token_expires_in: number
 }
 
-class AuthEndpointError extends Error {
-  readonly status: number
-
-  constructor(message: string, status: number) {
-    super(message)
-    this.status = status
-  }
-}
-
 const isRejection = (error: unknown): boolean =>
-  error instanceof AuthEndpointError && error.status >= 400 && error.status < 500 && error.status !== 429
+  error instanceof WaltRequestError && error.status >= 400 && error.status < 500 && error.status !== 429
 
 /**
  * Renews the access token from a stored refresh token over HTTPS, without Telegram.
@@ -136,22 +127,28 @@ export class RefreshTokenSource {
 
   protected async post(path: string, body: Record<string, unknown>): Promise<AuthResponse> {
     const { fetchImpl } = this
-    const response = await fetchImpl(`${this.authUrl}${path}`, {
-      method: 'POST',
-      headers: {
-        ...BROWSER_HEADERS,
-        accept: '*/*',
-        'sec-fetch-site': new URL(this.authUrl).origin === new URL(this.baseUrl).origin ? 'same-origin' : 'same-site',
-        'content-type': 'application/json',
-        origin: this.baseUrl,
-        referer: `${this.baseUrl}/`,
-        'x-wallet-tz-name': Intl.DateTimeFormat().resolvedOptions().timeZone,
-        'x-wallet-tz-offset': String(-new Date().getTimezoneOffset())
-      },
-      body: JSON.stringify(body)
-    })
+    let response: Response
+    try {
+      response = await fetchImpl(`${this.authUrl}${path}`, {
+        method: 'POST',
+        headers: {
+          ...BROWSER_HEADERS,
+          accept: '*/*',
+          'sec-fetch-site': new URL(this.authUrl).origin === new URL(this.baseUrl).origin ? 'same-origin' : 'same-site',
+          'content-type': 'application/json',
+          origin: this.baseUrl,
+          referer: `${this.baseUrl}/`,
+          'x-wallet-tz-name': Intl.DateTimeFormat().resolvedOptions().timeZone,
+          'x-wallet-tz-offset': String(-new Date().getTimezoneOffset())
+        },
+        body: JSON.stringify(body)
+      })
+    } catch (cause) {
+      throw new WaltRequestError(`${path} failed (no response)`, 0, null, null, { cause })
+    }
     if (!response.ok) {
-      throw new AuthEndpointError(`${path} failed (${response.status}): ${await response.text()}`, response.status)
+      const text = await response.text()
+      throw new WaltRequestError(`${path} failed (${response.status}): ${text}`, response.status, null, text)
     }
     return (await response.json()) as AuthResponse
   }

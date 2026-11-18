@@ -22,7 +22,7 @@ import type {
   PerpSystemStatus
 } from '~/api/perps.ts'
 import type { Transaction, TransactionDetails, TransactionGateway, TransactionsPage } from '~/api/transactions.ts'
-import { Transport, WaltAuthError } from '~/transport.ts'
+import { Transport, WaltError } from '~/transport.ts'
 
 const BASE_URL = 'https://walletbot.me'
 const CANDLE_BATCH_SIZE = 20
@@ -53,6 +53,8 @@ export type WaltClientOptions = {
   retryDelayMs?: number
   /** Requests allowed in flight at once. Default 4, `Infinity` removes the limit. */
   maxConcurrent?: number
+  /** Currency of the fiat values from `balances()`, `coins()`, `coinDetails()`, `charts()` and `priceForFiatAtTime()`. Default `USD`. */
+  fiatCurrency?: FiatCurrency
 }
 
 export type PortfolioEntry = {
@@ -73,11 +75,12 @@ export type Portfolio = {
 }
 
 export class WaltClient {
+  readonly fiatCurrency: FiatCurrency
   private readonly transport: Transport
 
   constructor(options: WaltClientOptions) {
     if (!options.tokenProvider) {
-      throw new WaltAuthError('tokenProvider is required')
+      throw new TypeError('tokenProvider is required')
     }
     const retries = options.retries ?? 3
     const maxConcurrent = options.maxConcurrent ?? 4
@@ -87,6 +90,7 @@ export class WaltClient {
     if (!Number.isInteger(retries) || retries < 0) {
       throw new RangeError(`retries must be a whole number of at least 0, got ${retries}`)
     }
+    this.fiatCurrency = options.fiatCurrency ?? 'USD'
     this.transport = new Transport({
       tokenProvider: options.tokenProvider,
       baseUrl: options.baseUrl ?? BASE_URL,
@@ -104,19 +108,19 @@ export class WaltClient {
   /**
    * Every balance with its account type, including what open limit and take-profit orders hold,
    * which `accounts()` omits.
-   *
-   * @param fiatCurrency - Currency of the fiat amounts and the overall total.
    */
-  async balances(fiatCurrency: FiatCurrency): Promise<Balances> {
-    const query = new URLSearchParams({ fiat_currency: fiatCurrency })
+  async balances(): Promise<Balances> {
+    const query = new URLSearchParams({ fiat_currency: this.fiatCurrency })
     const { data } = await this.transport.get<{ data: Balances }>(
       `/portmone/public-api/v1/user/accounts?${query.toString()}`
     )
     return data
   }
 
-  async coins(fiatCurrency: FiatCurrency): Promise<Coin[]> {
-    const { coins } = await this.transport.get<{ coins: Coin[] }>(`/api/v1/coins/list/${fiatCurrency}/`)
+  async coins(): Promise<Coin[]> {
+    const { coins } = await this.transport.get<{ coins: Coin[] }>(
+      `/api/v1/coins/list/${encodeURIComponent(this.fiatCurrency)}/`
+    )
     return coins
   }
 
@@ -163,7 +167,7 @@ export class WaltClient {
       items.push(...pageItems)
       const cursor = cursorOf(page)
       if (cursor === null) return items
-      if (seen.has(cursor)) throw new Error('pagination returned a cursor twice')
+      if (seen.has(cursor)) throw new WaltError('pagination returned a cursor twice')
       seen.add(cursor)
       previous = page
     }
@@ -173,7 +177,7 @@ export class WaltClient {
    * @param id - Transaction id from a listing row.
    * @param gateway - The row's `gateway`. Some records, such as `xstocks_dividends`, 404 without it.
    */
-  transactionDetails(id: number | string, gateway?: TransactionGateway | (string & {})): Promise<TransactionDetails> {
+  transactionDetails(id: number, gateway?: TransactionGateway | (string & {})): Promise<TransactionDetails> {
     const query = gateway ? `?${new URLSearchParams({ transaction_gateway: gateway }).toString()}` : ''
     return this.transport.get<TransactionDetails>(
       `/api/v1/transactions/details/${encodeURIComponent(String(id))}/${query}`
@@ -358,7 +362,7 @@ export class WaltClient {
     for (const status of options.statuses ?? []) query.append('statuses', status)
     const page = await this.transport.get<PerpOrdersPage>(`/perps/public-api/v2/orders/?${query.toString()}`)
     if (page.next_cursor != null) {
-      throw new Error(`more than ${PERP_ORDERS_PAGE_SIZE} perp orders, and paging them is not supported`)
+      throw new WaltError(`more than ${PERP_ORDERS_PAGE_SIZE} perp orders, and paging them is not supported`)
     }
     return page.orders
   }
@@ -376,27 +380,26 @@ export class WaltClient {
     return responses
   }
 
-  coinDetails(currency: string, fiatCurrency: FiatCurrency): Promise<CoinDetails> {
+  coinDetails(currency: string): Promise<CoinDetails> {
     return this.transport.get<CoinDetails>(
-      `/api/v1/coins/details/${encodeURIComponent(currency)}/${encodeURIComponent(fiatCurrency)}/`
+      `/api/v1/coins/details/${encodeURIComponent(currency)}/${encodeURIComponent(this.fiatCurrency)}/`
     )
   }
 
-  charts(currency: string, fiatCurrency: FiatCurrency): Promise<Charts> {
+  charts(currency: string): Promise<Charts> {
     return this.transport.get<Charts>(
-      `/api/v1/charts/${encodeURIComponent(currency)}/${encodeURIComponent(fiatCurrency)}/`
+      `/api/v1/charts/${encodeURIComponent(currency)}/${encodeURIComponent(this.fiatCurrency)}/`
     )
   }
 
   priceForFiatAtTime(
     cryptoCurrency: string,
-    localCurrency: FiatCurrency,
     amount: number | string,
     time: Date | string | number
   ): Promise<PriceAtTime> {
     const query = new URLSearchParams({
       crypto_currency: cryptoCurrency,
-      local_currency: localCurrency,
+      local_currency: this.fiatCurrency,
       amount: String(amount),
       time: time instanceof Date ? time.toISOString() : String(time)
     })
@@ -438,23 +441,23 @@ export class WaltClient {
   async portfolio(): Promise<Portfolio> {
     const data = await this.accounts()
     if (!Array.isArray(data.accounts)) {
-      throw new Error('accounts response carries no accounts array')
+      throw new WaltError('accounts response carries no accounts array')
     }
     const accountsTotal = decimal(data.available_balance_total_fiat_amount)
     if (accountsTotal === null) {
-      throw new Error(`accounts total is not a number: ${String(data.available_balance_total_fiat_amount)}`)
+      throw new WaltError(`accounts total is not a number: ${String(data.available_balance_total_fiat_amount)}`)
     }
 
     const entries: PortfolioEntry[] = []
     for (const account of data.accounts) {
       const balance = decimal(account.available_balance)
       if (balance === null) {
-        throw new Error(`${account.currency} balance is not a number: ${String(account.available_balance)}`)
+        throw new WaltError(`${account.currency} balance is not a number: ${String(account.available_balance)}`)
       }
       if (balance <= 0) continue
       const fiatValue = decimal(account.available_balance_fiat_amount)
       if (fiatValue === null) {
-        throw new Error(
+        throw new WaltError(
           `${account.currency} fiat value is not a number: ${String(account.available_balance_fiat_amount)}`
         )
       }
@@ -471,7 +474,7 @@ export class WaltClient {
       const closes = new Map(series.map((item) => [item.ticker, decimal(item.candles.at(-1)?.c)]))
       for (const entry of entries) {
         const close = closes.get(`${entry.currency}/USD/SPOT`) ?? null
-        if (close === null) throw new Error(`${entry.currency} has no candle price`)
+        if (close === null) throw new WaltError(`${entry.currency} has no candle price`)
         entry.fiatValue = Number(entry.amount) * close
       }
     }

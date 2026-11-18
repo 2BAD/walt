@@ -118,6 +118,7 @@ const client = new WaltClient({
   retries: 3, // extra attempts on a transient failure, 0 disables
   retryDelayMs: 500, // base of the exponential backoff
   maxConcurrent: 4, // requests in flight at once, Infinity removes the limit
+  fiatCurrency: 'USD', // currency of fiat values
   baseUrl: 'https://walletbot.me',
 
   // optional, off by default

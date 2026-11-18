@@ -1,8 +1,16 @@
 import { BROWSER_HEADERS, SENTRY_PUBLIC_KEY, SENTRY_RELEASE } from '~/browser.ts'
 
-export class WaltAuthError extends Error {}
+/** Base of every error the client throws for something the API or sign-in did. */
+export class WaltError extends Error {
+  override name = 'WaltError'
+}
 
-export class WaltRequestError extends Error {
+export class WaltAuthError extends WaltError {
+  override name = 'WaltAuthError'
+}
+
+export class WaltRequestError extends WaltError {
+  override name = 'WaltRequestError'
   /** HTTP status, or `0` when the request never got a response. */
   readonly status: number
   /** From a `retry-after` given in seconds. */

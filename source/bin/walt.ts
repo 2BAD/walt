@@ -6,6 +6,7 @@ import { createInterface } from 'node:readline/promises'
 import { parseArgs } from 'node:util'
 import { TelegramClient } from 'teleproto'
 import { StringSession } from 'teleproto/sessions/index.js'
+import type { FiatCurrency } from '~/api/accounts.ts'
 import { COMMANDS, run, UsageError } from '~/cli/run.ts'
 import { WaltClient } from '~/client.ts'
 import type { TokenState } from '~/refresh.ts'
@@ -136,7 +137,10 @@ const source = new TelegramTokenSource({
     }
   })
 })
-const client = new WaltClient({ tokenProvider: (rejected) => source.token(rejected) })
+const client = new WaltClient({
+  tokenProvider: (rejected) => source.token(rejected),
+  fiatCurrency: (values.fiat ?? 'USD').toUpperCase() as FiatCurrency
+})
 
 let exitCode = 0
 try {

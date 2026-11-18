@@ -228,7 +228,9 @@ describe('telegramTokenSource', () => {
     fetchImpl.mockRejectedValueOnce(new TypeError('fetch failed'))
     vi.advanceTimersByTime(300_000)
 
-    await expect(source.token()).rejects.toThrow('fetch failed')
+    await expect(source.token()).rejects.toThrow(
+      expect.objectContaining({ name: 'WaltRequestError', status: 0, cause: new TypeError('fetch failed') })
+    )
     expect(telegram.invoke).toHaveBeenCalledTimes(1)
   })
 

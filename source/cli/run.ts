@@ -1,4 +1,3 @@
-import type { FiatCurrency } from '~/api/accounts.ts'
 import type { ExchangeQuote } from '~/api/exchange.ts'
 import type { WaltClient } from '~/client.ts'
 import { WaltRequestError } from '~/transport.ts'
@@ -9,7 +8,6 @@ type Report = { columns: Column[]; rows: Row[]; footer?: string[] }
 
 export type CliOptions = {
   json?: boolean
-  fiat?: string
   asset?: string
   limit?: string
   from?: string
@@ -68,8 +66,8 @@ const positiveInteger = (value: string | undefined, fallback: number): number =>
   return parsed
 }
 
-const balances = async (client: WaltClient, fiat: string, options: CliOptions): Promise<Report> => {
-  const data = await client.balances(fiat as FiatCurrency)
+const balances = async (client: WaltClient, options: CliOptions): Promise<Report> => {
+  const data = await client.balances()
   const total = Number(data.overall_available_balance_fiat_amount)
   const held = data.accounts
     .filter((account) => Number(account.total_balance) > 0)
@@ -161,11 +159,11 @@ const transactions = async (client: WaltClient, options: CliOptions): Promise<Re
   }
 }
 
-const price = async (client: WaltClient, symbols: string[], fiat: string): Promise<Report> => {
+const price = async (client: WaltClient, symbols: string[]): Promise<Report> => {
   if (symbols.length === 0) throw new UsageError('price needs at least one symbol, such as `walt price BTC`')
   const rows = await Promise.all(
     symbols.map(async (symbol) => {
-      const charts = await client.charts(symbol, fiat as FiatCurrency)
+      const charts = await client.charts(symbol)
       const rates = (points: { rate: string }[]) => points.map((point) => Number(point.rate))
       const day = rates(charts.day)
       const last = day.at(-1) ?? rates(charts.month).at(-1)
@@ -182,7 +180,7 @@ const price = async (client: WaltClient, symbols: string[], fiat: string): Promi
   return {
     columns: [
       { key: 'asset', title: 'ASSET' },
-      { key: 'price', title: `PRICE ${fiat}`, numeric: true },
+      { key: 'price', title: `PRICE ${client.fiatCurrency}`, numeric: true },
       { key: 'day', title: '24H', numeric: true },
       { key: 'week', title: '7D', numeric: true },
       { key: 'month', title: '30D', numeric: true }
@@ -381,11 +379,10 @@ export const run = async (
   args: string[],
   options: CliOptions = {}
 ): Promise<string> => {
-  const fiat = (options.fiat ?? 'USD').toUpperCase()
   let report: Report
   switch (command) {
     case 'balances':
-      report = await balances(client, fiat, options)
+      report = await balances(client, options)
       break
     case 'history':
       report = await history(client, options)
@@ -394,7 +391,7 @@ export const run = async (
       report = await transactions(client, options)
       break
     case 'price':
-      report = await price(client, args, fiat)
+      report = await price(client, args)
       break
     case 'quote':
       report = await quote(client, args)

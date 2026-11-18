@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { WaltClient } from '~/client.ts'
-import { WaltAuthError, WaltRequestError } from '~/transport.ts'
+import { WaltAuthError, WaltError, WaltRequestError } from '~/transport.ts'
 
 type FetchMock = ReturnType<typeof vi.fn<typeof fetch>>
 
@@ -27,7 +27,7 @@ describe('waltClient', () => {
   it('requires a tokenProvider', () => {
     expect.assertions(1)
 
-    expect(() => new WaltClient({} as unknown as { tokenProvider: () => Promise<string> })).toThrow(WaltAuthError)
+    expect(() => new WaltClient({} as unknown as { tokenProvider: () => Promise<string> })).toThrow(TypeError)
   })
 
   it('prices a portfolio at the latest candle close', async () => {
@@ -175,6 +175,28 @@ describe('waltClient', () => {
     await expect(makeClient(fetchImpl).portfolio()).rejects.toThrow('total is not a number')
   })
 
+  it('throws a named WaltError for a response it cannot use', async () => {
+    expect.assertions(2)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: null }))
+    const failure = makeClient(fetchImpl).portfolio()
+
+    await expect(failure).rejects.toThrow(WaltError)
+    await expect(failure).rejects.toHaveProperty('name', 'WaltError')
+  })
+
+  it('names the auth and request errors and makes them WaltErrors', () => {
+    expect.assertions(4)
+
+    const auth = new WaltAuthError('rejected')
+    const request = new WaltRequestError('failed', 500, null, null)
+
+    expect(auth).toBeInstanceOf(WaltError)
+    expect(auth.name).toBe('WaltAuthError')
+    expect(request).toBeInstanceOf(WaltError)
+    expect(request.name).toBe('WaltRequestError')
+  })
+
   it('rejects a balance that is not a number instead of dropping the row', async () => {
     expect.assertions(1)
 
@@ -226,7 +248,7 @@ describe('waltClient', () => {
     expect.assertions(1)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ coins: [{ currency: 'BTC', rate: '62000' }] }))
-    const coins = await makeClient(fetchImpl).coins('USD')
+    const coins = await makeClient(fetchImpl).coins()
 
     expect(coins[0]?.currency).toBe('BTC')
   })
@@ -365,7 +387,7 @@ describe('waltClient', () => {
         chart_preview_rate_24h: [{ timestamp: 1767225600, value: '5.12' }]
       })
     )
-    const details = await makeClient(fetchImpl).coinDetails('TON', 'USD')
+    const details = await makeClient(fetchImpl).coinDetails('TON')
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/coins/details/TON/USD/')
     expect(details.market_cap).toBeNull()
@@ -385,7 +407,7 @@ describe('waltClient', () => {
       })
     )
 
-    const { day } = await makeClient(fetchImpl).charts('TON', 'USD')
+    const { day } = await makeClient(fetchImpl).charts('TON')
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/charts/TON/USD/')
     expect(day[0]?.rate).toBe('5.12')
@@ -396,7 +418,7 @@ describe('waltClient', () => {
     expect.assertions(2)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ rate: '1.500000000000' }))
-    const price = await makeClient(fetchImpl).priceForFiatAtTime('TON', 'USD', 1, '2026-01-01T00:00:00Z')
+    const price = await makeClient(fetchImpl).priceForFiatAtTime('TON', 1, '2026-01-01T00:00:00Z')
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
       'https://walletbot.me/api/v1/exchange_rates/price_for_fiat_at_time/?crypto_currency=TON&local_currency=USD&amount=1&time=2026-01-01T00%3A00%3A00Z'
@@ -408,9 +430,33 @@ describe('waltClient', () => {
     expect.assertions(1)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}))
-    await makeClient(fetchImpl).priceForFiatAtTime('TON', 'USD', 1, new Date('2026-01-01T00:00:00Z'))
+    await makeClient(fetchImpl).priceForFiatAtTime('TON', 1, new Date('2026-01-01T00:00:00Z'))
 
     expect(fetchImpl.mock.calls[0]?.[0]).toContain('time=2026-01-01T00%3A00%3A00.000Z')
+  })
+
+  it('sends the fiat currency of the client to every endpoint that takes one', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ coins: [], data: {} }))
+    const client = new WaltClient({
+      tokenProvider: async () => 'jwt.token.value',
+      fetch: fetchImpl,
+      fiatCurrency: 'EUR'
+    })
+    await client.balances()
+    await client.coins()
+    await client.coinDetails('TON')
+    await client.charts('TON')
+    await client.priceForFiatAtTime('TON', 1, '2026-01-01T00:00:00Z')
+
+    expect(fetchImpl.mock.calls.map(([url]) => String(url).replace('https://walletbot.me', ''))).toStrictEqual([
+      '/portmone/public-api/v1/user/accounts?fiat_currency=EUR',
+      '/api/v1/coins/list/EUR/',
+      '/api/v1/coins/details/TON/EUR/',
+      '/api/v1/charts/TON/EUR/',
+      '/api/v1/exchange_rates/price_for_fiat_at_time/?crypto_currency=TON&local_currency=EUR&amount=1&time=2026-01-01T00%3A00%3A00Z'
+    ])
   })
 
   it('reads the local currency', async () => {
@@ -669,7 +715,7 @@ describe('waltClient balances', () => {
     const data = { accounts: [{ account_type: 'HOLD_LIMIT', currency: 'USDT' }], fiat_currency: 'USD' }
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ status: 'SUCCESS', data }))
 
-    expect(await makeClient(fetchImpl).balances('USD')).toStrictEqual(data)
+    expect(await makeClient(fetchImpl).balances()).toStrictEqual(data)
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
       'https://walletbot.me/portmone/public-api/v1/user/accounts?fiat_currency=USD'
     )

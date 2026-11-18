@@ -1,15 +1,18 @@
 # Errors
 
 ```ts
-import { WaltAuthError, WaltRequestError } from '@2bad/walt'
+import { WaltAuthError, WaltError, WaltRequestError } from '@2bad/walt'
 
 try {
   await client.accounts()
 } catch (error) {
   if (error instanceof WaltRequestError) console.log(error.status) // 404
-  if (error instanceof WaltAuthError) console.log('sign in again')
+  else if (error instanceof WaltAuthError) console.log('sign in again')
+  else if (error instanceof WaltError) console.log(error.message) // accounts total is not a number: undefined
 }
 ```
+
+`WaltAuthError` and `WaltRequestError` extend `WaltError`. A plain `WaltError` means a response the client could not use.
 
 ## `WaltRequestError`
 

@@ -44,7 +44,7 @@ await source.disconnect()
 - [Prices](examples/prices.md): coin rates, charts and past prices
 - [Exchange](examples/exchange.md): available pairs, quotes, exchanges and limit orders
 - [Transactions](examples/transactions.md): history, details and reading a transaction
-- [Errors](examples/errors.md): `WaltRequestError`, `WaltAuthError` and what is retried
+- [Errors](examples/errors.md): `WaltError`, `WaltRequestError`, `WaltAuthError` and what is retried
 - [Command line](examples/cli.md): the read-only `walt` command for balances, history, prices and orders
 
 A runnable script is in [examples/portfolio.ts](examples/portfolio.ts).
@@ -70,7 +70,7 @@ new WaltClient(options: WaltClientOptions)
 type WaltClient = {
   accounts(): Promise<AccountsResponse>
   portfolio(): Promise<Portfolio>
-  balances(fiatCurrency: FiatCurrency): Promise<Balances>
+  balances(): Promise<Balances>
   pnl(): Promise<PnlResponse>
   portfolioHistory(dateFrom: Date | string, resolution: '1d' | '1m'): Promise<PortfolioHistory>
 
@@ -78,10 +78,10 @@ type WaltClient = {
   earnCampaignTransactions(campaignId: number): Promise<EarnTransaction[]>
   earnRate(from: string, to: string): Promise<EarnRate>
 
-  coins(fiatCurrency: FiatCurrency): Promise<Coin[]>
-  coinDetails(currency: string, fiatCurrency: FiatCurrency): Promise<CoinDetails>
-  charts(currency: string, fiatCurrency: FiatCurrency): Promise<Charts>
-  priceForFiatAtTime(crypto: string, fiat: FiatCurrency, amount: number | string, time: Date | string | number): Promise<PriceAtTime>
+  coins(): Promise<Coin[]>
+  coinDetails(currency: string): Promise<CoinDetails>
+  charts(currency: string): Promise<Charts>
+  priceForFiatAtTime(crypto: string, amount: number | string, time: Date | string | number): Promise<PriceAtTime>
   localCurrency(): Promise<FiatCurrency>
   candles(requests: CandleRequest[]): Promise<CandleSeries[]>
 
@@ -104,7 +104,7 @@ type WaltClient = {
   perpOrders(options?: { contractId?: number; statuses?: PerpOrderStatus[] }): Promise<PerpOrder[]>
 
   transactions(options?: { currency?: string }): Promise<Transaction[]>
-  transactionDetails(id: number | string, gateway?: TransactionGateway): Promise<TransactionDetails>
+  transactionDetails(id: number, gateway?: TransactionGateway): Promise<TransactionDetails>
 }
 
 function normalizeTransaction(details: TransactionDetails): NormalizedTransaction
