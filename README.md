@@ -40,7 +40,7 @@ await source.disconnect()
 ## Examples
 
 - [Connecting](examples/connecting.md): Telegram credentials, token storage, refreshing without Telegram, retries and pacing
-- [Balances](examples/balances.md): accounts, portfolio, profit and loss, staked funds, IPO subscriptions
+- [Balances](examples/balances.md): accounts, portfolio, profit and loss, staked funds, IPO subscriptions, history
 - [Prices](examples/prices.md): coin rates, charts and past prices
 - [Exchange](examples/exchange.md): available pairs, quotes, exchanges and limit orders
 - [Transactions](examples/transactions.md): history, details and reading a transaction
@@ -68,6 +68,8 @@ type RefreshTokenSource = {
 new WaltClient(options: WaltClientOptions)
 
 type WaltClient = {
+  readonly fiatCurrency: FiatCurrency
+
   accounts(): Promise<AccountsResponse>
   portfolio(): Promise<Portfolio>
   balances(): Promise<Balances>

@@ -24,10 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** `balances()`, `coins()`, `coinDetails()`, `charts()` and `priceForFiatAtTime()` no longer take a fiat currency. Set `fiatCurrency` on `WaltClient` instead.
 - **Breaking:** `transactionDetails()` now takes only a numeric id. Pass the `id` of a transaction row.
 - **Breaking:** `WaltClient` now throws `TypeError` instead of `WaltAuthError` without a `tokenProvider`. Catch `TypeError` for that case.
+- **Breaking:** Renamed `quote()` to `exchangeQuote()`, which takes the fields `createExchange()` takes. Pass `{ from_currency, to_currency, from_amount }`.
+- `perpOrders()` now throws a `WaltError` when there are more than 100 orders instead of returning a partial list
 - Unusable responses and failed Telegram sign-ins now throw a `WaltError` instead of a plain `Error`
 - A refresh request that gets no response now throws `WaltRequestError` with status `0`
 - `WaltAuthError` and `WaltRequestError` now show their own name in stack traces
-- **Breaking:** Renamed `quote()` to `exchangeQuote()`, which takes the fields `createExchange()` takes. Pass `{ from_currency, to_currency, from_amount }`.
 
 ### Removed
 

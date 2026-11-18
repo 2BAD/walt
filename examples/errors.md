@@ -4,7 +4,7 @@
 import { WaltAuthError, WaltError, WaltRequestError } from '@2bad/walt'
 
 try {
-  await client.accounts()
+  await client.portfolio()
 } catch (error) {
   if (error instanceof WaltRequestError) console.log(error.status) // 404
   else if (error instanceof WaltAuthError) console.log('sign in again')

@@ -39,7 +39,7 @@ const source = new TelegramTokenSource({
   maxFloodWaitMs: 60_000, // longest FLOOD_WAIT to wait out before throwing
 
   // optional, off by default
-  storage, // custom token store, false keeps the token in memory
+  storage, // custom token store instead of the cache file, false keeps the token in memory
   deviceSerial, // reuse a device id from an earlier session
   fetch // custom fetch implementation
 })

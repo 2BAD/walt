@@ -9,7 +9,9 @@ const coins = await client.coins()
 
 `balances()`, `coins()`, `coinDetails()`, `charts()` and `priceForFiatAtTime()` use the client's `fiatCurrency`. The default is `USD`.
 
-`accounts()` and `portfolio()` use the account's own currency. `localCurrency()` returns it.
+`accounts()` and `portfolio()` ignore it and report in the currency the account uses.
+
+`localCurrency()` returns the account's local currency.
 
 ```ts
 const client = new WaltClient({ tokenProvider, fiatCurrency: 'EUR' })
