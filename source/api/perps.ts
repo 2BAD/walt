@@ -66,8 +66,9 @@ export type PerpSystemStatus = {
 
 export type PerpOrdersPage = {
   orders: PerpOrder[]
-  next_cursor: unknown
-  /** `sort_ts` of the last order on the page, `null` on an empty page. */
+  /** Null on the last page. */
+  next_cursor: string | null
+  /** Not the `sort_ts` of the last order on the page. Null on an empty page. */
   last_sort_ts: string | null
 }
 

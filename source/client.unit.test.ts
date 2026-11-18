@@ -785,14 +785,22 @@ describe('waltClient perps', () => {
     )
   })
 
-  it('rejects perp orders that do not fit on one page instead of cutting them off', async () => {
-    expect.assertions(1)
+  it('pages perp orders by cursor with the filters on every page until the cursor is null', async () => {
+    expect.assertions(2)
 
-    const fetchImpl = vi.fn<typeof fetch>(async () =>
-      jsonResponse({ orders: [{ order_id: 'order-1' }], next_cursor: 'more', last_sort_ts: null })
-    )
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({ orders: [{ order_id: 'order-1' }], next_cursor: 'cursor+2=', last_sort_ts: 'ts' })
+      )
+      .mockResolvedValueOnce(jsonResponse({ orders: [{ order_id: 'order-2' }], next_cursor: null, last_sort_ts: 'ts' }))
+    const orders = await makeClient(fetchImpl).perpOrders({ statuses: ['filled'] })
 
-    await expect(makeClient(fetchImpl).perpOrders()).rejects.toThrow('more than 100 perp orders')
+    expect(orders.map((order) => order.order_id)).toStrictEqual(['order-1', 'order-2'])
+    expect(fetchImpl.mock.calls.map(([url]) => String(url))).toStrictEqual([
+      'https://walletbot.me/perps/public-api/v2/orders/?limit=100&statuses=filled',
+      'https://walletbot.me/perps/public-api/v2/orders/?limit=100&statuses=filled&cursor=cursor%2B2%3D'
+    ])
   })
 })
 

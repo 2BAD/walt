@@ -356,15 +356,18 @@ export class WaltClient {
    * @param options.contractId - Only this contract.
    * @param options.statuses - Only orders in these states.
    */
-  async perpOrders(options: { contractId?: number; statuses?: PerpOrderStatus[] } = {}): Promise<PerpOrder[]> {
-    const query = new URLSearchParams({ limit: String(PERP_ORDERS_PAGE_SIZE) })
-    if (options.contractId !== undefined) query.set('contract_id', String(options.contractId))
-    for (const status of options.statuses ?? []) query.append('statuses', status)
-    const page = await this.transport.get<PerpOrdersPage>(`/perps/public-api/v2/orders/?${query.toString()}`)
-    if (page.next_cursor != null) {
-      throw new WaltError(`more than ${PERP_ORDERS_PAGE_SIZE} perp orders, and paging them is not supported`)
-    }
-    return page.orders
+  perpOrders(options: { contractId?: number; statuses?: PerpOrderStatus[] } = {}): Promise<PerpOrder[]> {
+    return this.paged<PerpOrdersPage, PerpOrder>(
+      (previous) => {
+        const query = new URLSearchParams({ limit: String(PERP_ORDERS_PAGE_SIZE) })
+        if (options.contractId !== undefined) query.set('contract_id', String(options.contractId))
+        for (const status of options.statuses ?? []) query.append('statuses', status)
+        if (previous?.next_cursor != null) query.set('cursor', previous.next_cursor)
+        return this.transport.get<PerpOrdersPage>(`/perps/public-api/v2/orders/?${query.toString()}`)
+      },
+      (page) => page.orders,
+      (page) => page.next_cursor
+    )
   }
 
   /**
