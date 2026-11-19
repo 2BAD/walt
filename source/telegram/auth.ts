@@ -10,16 +10,16 @@ export type TelegramTokenSourceOptions = {
   session: string
   apiId: number
   apiHash: string
-  bot?: string
-  deviceSerial?: string
+  bot?: string | undefined
+  deviceSerial?: string | undefined
   /** Origin of the web app, sent as `origin` and `referer`. */
-  baseUrl?: string
+  baseUrl?: string | undefined
   /** Where the auth and refresh requests go. */
-  authUrl?: string
-  fetch?: typeof fetch
+  authUrl?: string | undefined
+  fetch?: typeof fetch | undefined
   /** Defaults to a file in the user cache directory; `false` keeps the token in memory. */
-  storage?: TokenStorage | false
-  maxFloodWaitMs?: number
+  storage?: TokenStorage | false | undefined
+  maxFloodWaitMs?: number | undefined
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))

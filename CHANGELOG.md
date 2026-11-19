@@ -30,10 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** `limitOrderQuote()` now takes the currency and `{ side, priceLimit, amount }` or `{ side, priceLimit, quantity }`. Move the arguments into one object.
 - **Breaking:** `portfolioHistory()` now takes `{ from, resolution }` with `day` or `month`. Replace `'1d'` and `'1m'`.
 - **Breaking:** Renamed `priceForFiatAtTime()` to `priceAtTime()`, which takes the currency and `{ amount, time }`. Call `priceAtTime('TON', { amount, time })`.
+- **Breaking:** `priceAtTime()` no longer takes a number as `time`. Pass a `Date` or an ISO 8601 string.
 - **Breaking:** `earnRate()` now takes `{ from, to }`. Wrap both currencies in an object.
 - **Breaking:** Renamed the `AccountsResponse` and `PnlResponse` types to `Accounts` and `Pnl`. Update the type imports.
 - **Breaking:** `portfolio()` is now a function that takes the client. Call `portfolio(client)` instead of `client.portfolio()`.
 - Unusable responses and failed Telegram sign-ins now throw a `WaltError` instead of a plain `Error`
+- `exchangeQuote()` and `createExchange()` now take the amount as a number or a decimal string, and throw `RangeError` for an amount that is not a number
+- Optional fields of `WaltClientOptions` and `TelegramTokenSourceOptions` now accept `undefined`, as in `RefreshTokenSourceOptions`
 - A refresh request that gets no response now throws `WaltRequestError` with status `0`
 - `WaltAuthError` and `WaltRequestError` now show their own name in stack traces
 

@@ -671,6 +671,28 @@ describe('waltClient exchange', () => {
     )
   })
 
+  it('sends a string amount as a json number', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ uid: 'u', ttl: 20 }))
+    await makeClient(fetchImpl).createExchange({ from: 'USDT', to: 'XLEx', amount: '2.5', localCurrency: 'USD' })
+
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toHaveProperty('from_amount', 2.5)
+  })
+
+  it.each(['', 'abc', '1,5'])('rejects the amount %j before sending an exchange', async (amount) => {
+    expect.assertions(3)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ uid: 'u', ttl: 20 }))
+    const client = makeClient(fetchImpl)
+
+    await expect(client.createExchange({ from: 'USDT', to: 'XLEx', amount, localCurrency: 'USD' })).rejects.toThrow(
+      RangeError
+    )
+    await expect(client.exchangeQuote({ from: 'USDT', to: 'XLEx', amount })).rejects.toThrow(RangeError)
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
   it('leaves max_amount out of an exchange request that does not set it', async () => {
     expect.assertions(1)
 

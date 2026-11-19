@@ -35,19 +35,25 @@ const calendarDate = (date: Date): string =>
     .map((part) => String(part).padStart(2, '0'))
     .join('-')
 
+const exchangeAmount = (amount: number | string): number => {
+  const parsed = typeof amount === 'number' ? amount : amount.trim() === '' ? Number.NaN : Number(amount)
+  if (!Number.isFinite(parsed)) throw new RangeError(`amount must be a finite number, got ${String(amount)}`)
+  return parsed
+}
+
 export type WaltClientOptions = {
   /** Called again with the rejected token after a 401, so the provider can renew it before its expiry. */
   tokenProvider: (rejected?: string) => Promise<string>
-  baseUrl?: string
-  fetch?: typeof fetch
+  baseUrl?: string | undefined
+  fetch?: typeof fetch | undefined
   /** Extra attempts after a request fails on a transient status. Default 3, `0` disables retrying. */
-  retries?: number
+  retries?: number | undefined
   /** Base for the exponential backoff between those attempts, in ms. Default 500. */
-  retryDelayMs?: number
+  retryDelayMs?: number | undefined
   /** Requests allowed in flight at once. Default 4, `Infinity` removes the limit. */
-  maxConcurrent?: number
+  maxConcurrent?: number | undefined
   /** Currency of the fiat values from `balances()`, `coins()`, `coin()`, `charts()` and `priceAtTime()`. Default `USD`. */
-  fiatCurrency?: FiatCurrency
+  fiatCurrency?: FiatCurrency | undefined
 }
 
 export class WaltClient {
@@ -151,7 +157,7 @@ export class WaltClient {
 
   /**
    * @param id - Transaction id from a listing row.
-   * @param options - Filters, all optional.
+   * @param options - Lookup options, all optional.
    * @param options.gateway - The row's `gateway`. Some records, such as `xstocks_dividends`, 404 without it.
    */
   transaction(id: number, options: { gateway?: TransactionGateway | (string & {}) } = {}): Promise<TransactionDetails> {
@@ -381,16 +387,13 @@ export class WaltClient {
     )
   }
 
-  priceAtTime(
-    currency: string,
-    lookup: { amount: number | string; time: Date | string | number }
-  ): Promise<PriceAtTime> {
+  priceAtTime(currency: string, lookup: { amount: number | string; time: Date | string }): Promise<PriceAtTime> {
     const { amount, time } = lookup
     const query = new URLSearchParams({
       crypto_currency: currency,
       local_currency: this.fiatCurrency,
       amount: String(amount),
-      time: time instanceof Date ? time.toISOString() : String(time)
+      time: time instanceof Date ? time.toISOString() : time
     })
     return this.transport.get<PriceAtTime>(`/api/v1/exchange_rates/price_for_fiat_at_time/?${query.toString()}`)
   }
@@ -404,9 +407,9 @@ export class WaltClient {
    *
    * @param request - The exchange as `createExchange()` takes it. An `amount` of `0` returns the rate and limits only.
    */
-  exchangeQuote(request: Pick<ExchangeRequest, 'from' | 'to' | 'amount'>): Promise<ExchangeQuote> {
+  async exchangeQuote(request: Pick<ExchangeRequest, 'from' | 'to' | 'amount'>): Promise<ExchangeQuote> {
     return this.transport.post<ExchangeQuote>('/api/v1/exchange/convert/', {
-      from_amount: request.amount,
+      from_amount: exchangeAmount(request.amount),
       from_currency: request.from,
       to_currency: request.to
     })
@@ -417,11 +420,11 @@ export class WaltClient {
    *
    * @param request - The exchange, as `exchangeQuote()` takes it plus the fiat currency to value it in.
    */
-  createExchange(request: ExchangeRequest): Promise<Exchange> {
+  async createExchange(request: ExchangeRequest): Promise<Exchange> {
     const body = {
       from_currency: request.from,
       to_currency: request.to,
-      from_amount: request.amount,
+      from_amount: exchangeAmount(request.amount),
       local_currency: request.localCurrency,
       ...(request.wholeBalance === undefined ? {} : { max_amount: request.wholeBalance })
     }

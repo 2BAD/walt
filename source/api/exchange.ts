@@ -20,7 +20,7 @@ export type ExchangeQuote = {
 export type ExchangeRequest = {
   from: string
   to: string
-  amount: number
+  amount: number | string
   localCurrency: FiatCurrency
   /** Set when `amount` is the whole balance. */
   wholeBalance?: boolean
