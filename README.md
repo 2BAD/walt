@@ -27,12 +27,12 @@ It imports no Node.js API and no Telegram library, for runtimes such as Cloudfla
 ## Quick start
 
 ```ts
-import { TelegramTokenSource, WaltClient } from '@2bad/walt'
+import { portfolio, TelegramTokenSource, WaltClient } from '@2bad/walt'
 
 const source = new TelegramTokenSource({ session: 'SESSION_STRING', apiId: 12345, apiHash: 'API_HASH' })
 const client = new WaltClient({ tokenProvider: (rejected) => source.token(rejected) })
 
-const { entries, total, fiatCurrency } = await client.portfolio()
+const { entries, total, fiatCurrency } = await portfolio(client)
 console.log(entries[0], total, fiatCurrency) // { currency: 'TON', amount: '120.5', fiatValue: 381.2 } 1250.4 USD
 await source.disconnect()
 ```
@@ -70,30 +70,29 @@ new WaltClient(options: WaltClientOptions)
 type WaltClient = {
   readonly fiatCurrency: FiatCurrency
 
-  accounts(): Promise<AccountsResponse>
-  portfolio(): Promise<Portfolio>
+  accounts(): Promise<Accounts>
   balances(): Promise<Balances>
-  pnl(): Promise<PnlResponse>
-  portfolioHistory(dateFrom: Date | string, resolution: '1d' | '1m'): Promise<PortfolioHistory>
+  pnl(): Promise<Pnl>
+  portfolioHistory(range: { from: Date | string; resolution: 'day' | 'month' }): Promise<PortfolioHistory>
 
   earnCampaigns(): Promise<EarnCampaign[]>
   earnCampaignTransactions(campaignId: number): Promise<EarnTransaction[]>
-  earnRate(from: string, to: string): Promise<EarnRate>
+  earnRate(pair: { from: string; to: string }): Promise<EarnRate>
 
   coins(): Promise<Coin[]>
-  coinDetails(currency: string): Promise<CoinDetails>
+  coin(currency: string): Promise<CoinDetails>
   charts(currency: string): Promise<Charts>
-  priceForFiatAtTime(crypto: string, amount: number | string, time: Date | string | number): Promise<PriceAtTime>
+  priceForFiatAtTime(currency: string, lookup: { amount: number | string; time: Date | string | number }): Promise<PriceAtTime>
   localCurrency(): Promise<FiatCurrency>
   candles(requests: CandleRequest[]): Promise<CandleSeries[]>
 
   availableExchanges(): Promise<AvailableExchanges>
-  exchangeQuote(request: Pick<ExchangeRequest, 'from_currency' | 'to_currency' | 'from_amount'>): Promise<ExchangeQuote>
-  createExchange(request: ExchangeRequest): Promise<Exchange> // moves real money, never retried
+  exchangeQuote(request: { from: string; to: string; amount: number }): Promise<ExchangeQuote>
+  createExchange(request: { from: string; to: string; amount: number; localCurrency: FiatCurrency; maxAmount?: boolean }): Promise<Exchange> // moves real money, never retried
 
   limitOrders(options?: { statuses?: string[] }): Promise<LimitOrder[]>
   limitOrder(id: string): Promise<LimitOrder>
-  limitOrderQuote(baseCurrency: string, side: 'BUY' | 'SELL', priceLimit: number | string, size: { amount: number | string } | { quantity: number | string }): Promise<LimitOrderQuote>
+  limitOrderQuote(baseCurrency: string, order: { side: 'BUY' | 'SELL'; priceLimit: number | string } & ({ amount: number | string } | { quantity: number | string })): Promise<LimitOrderQuote>
   limitOrderBounds(baseCurrency: string): Promise<LimitOrderBounds>
   limitOrderTokens(): Promise<LimitOrderToken[]>
 
@@ -106,9 +105,10 @@ type WaltClient = {
   perpOrders(options?: { contractId?: number; statuses?: PerpOrderStatus[] }): Promise<PerpOrder[]>
 
   transactions(options?: { currency?: string }): Promise<Transaction[]>
-  transactionDetails(id: number, gateway?: TransactionGateway): Promise<TransactionDetails>
+  transaction(id: number, options?: { gateway?: string }): Promise<TransactionDetails>
 }
 
+function portfolio(client: WaltClient): Promise<Portfolio>
 function normalizeTransaction(details: TransactionDetails): NormalizedTransaction
 ```
 

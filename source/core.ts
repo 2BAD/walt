@@ -3,7 +3,7 @@ export type {
   AccountAction,
   AccountActions,
   AccountAddress,
-  AccountsResponse,
+  Accounts,
   ChartPoint,
   Charts,
   Coin,
@@ -13,14 +13,7 @@ export type {
   TradingHoursPeriod,
   TradingHoursState
 } from '~/api/accounts.ts'
-export type {
-  PnlPosition,
-  PnlResponse,
-  PnlTotals,
-  PortfolioFlows,
-  PortfolioHistory,
-  PortfolioPeriod
-} from '~/api/analytics.ts'
+export type { PnlPosition, Pnl, PnlTotals, PortfolioFlows, PortfolioHistory, PortfolioPeriod } from '~/api/analytics.ts'
 export type { Balance, Balances } from '~/api/balances.ts'
 export type { Candle, CandleRequest, CandleSeries } from '~/api/candles.ts'
 export type {
@@ -55,7 +48,9 @@ export type {
   TransactionLeg
 } from '~/api/transactions.ts'
 export { WaltClient } from '~/client.ts'
-export type { Portfolio, PortfolioEntry, WaltClientOptions } from '~/client.ts'
+export type { WaltClientOptions } from '~/client.ts'
+export { portfolio } from '~/portfolio.ts'
+export type { Portfolio, PortfolioEntry } from '~/portfolio.ts'
 export { RefreshTokenSource } from '~/refresh.ts'
 export type { RefreshTokenSourceOptions, TokenState, TokenStorage } from '~/refresh.ts'
 export { WaltAuthError, WaltError, WaltRequestError } from '~/transport.ts'

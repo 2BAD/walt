@@ -21,7 +21,7 @@ export type PnlTotals = {
   percentage_all_time: string
 }
 
-export type PnlResponse = {
+export type Pnl = {
   positions: PnlPosition[]
   total: PnlTotals
 }

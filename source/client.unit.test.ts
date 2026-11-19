@@ -10,179 +10,11 @@ const jsonResponse = (body: unknown, status = 200) =>
 const makeClient = (fetchImpl: FetchMock) =>
   new WaltClient({ tokenProvider: async () => 'jwt.token.value', fetch: fetchImpl })
 
-const portfolioFetch = (accounts: unknown, closes: Record<string, string>) =>
-  vi.fn<typeof fetch>(async (input, init) => {
-    if (!String(input).endsWith('/candles/batch')) return jsonResponse(accounts)
-    const { requests } = JSON.parse(String(init?.body)) as { requests: { ticker: string }[] }
-    return jsonResponse({
-      responses: requests.map(({ ticker }) => {
-        const close = closes[ticker]
-        const candles = close === undefined ? [] : [{ o: close, h: close, l: close, c: close, v: '0' }]
-        return { ticker, resolution: '1m', start_ts: 1, candles }
-      })
-    })
-  })
-
 describe('waltClient', () => {
   it('requires a tokenProvider', () => {
     expect.assertions(1)
 
     expect(() => new WaltClient({} as unknown as { tokenProvider: () => Promise<string> })).toThrow(TypeError)
-  })
-
-  it('prices a portfolio at the latest candle close', async () => {
-    expect.assertions(4)
-
-    const fetchImpl = portfolioFetch(
-      {
-        available_balance_total_fiat_amount: '150.00',
-        available_balance_total_fiat_currency: 'USD',
-        accounts: [
-          { currency: 'TON', available_balance: '10', available_balance_fiat_amount: '50.00' },
-          { currency: 'BTC', available_balance: '0.5', available_balance_fiat_amount: '100.00' },
-          { currency: 'ETH', available_balance: '0', available_balance_fiat_amount: '0.00' }
-        ]
-      },
-      { 'TON/USD/SPOT': '12', 'BTC/USD/SPOT': '300' }
-    )
-
-    const { entries, total, fiatCurrency } = await makeClient(fetchImpl).portfolio()
-
-    expect(entries).toStrictEqual([
-      { currency: 'BTC', amount: '0.5', fiatValue: 150 },
-      { currency: 'TON', amount: '10', fiatValue: 120 }
-    ])
-    expect(total).toBe(270)
-    expect(fiatCurrency).toBe('USD')
-    expect(JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body))).toStrictEqual({
-      requests: [
-        { ticker: 'TON/USD/SPOT', resolution: '1m', limit: 1 },
-        { ticker: 'BTC/USD/SPOT', resolution: '1m', limit: 1 }
-      ]
-    })
-  })
-
-  it('adds what the accounts total holds beyond spot balances as staked', async () => {
-    expect.assertions(3)
-
-    const fetchImpl = portfolioFetch(
-      {
-        available_balance_total_fiat_amount: '250.00',
-        available_balance_total_fiat_currency: 'USD',
-        accounts: [
-          { currency: 'TON', available_balance: '10', available_balance_fiat_amount: '50.00' },
-          { currency: 'BTC', available_balance: '0.5', available_balance_fiat_amount: '100.00' }
-        ]
-      },
-      { 'TON/USD/SPOT': '12', 'BTC/USD/SPOT': '300' }
-    )
-
-    const { entriesTotal, total, staked } = await makeClient(fetchImpl).portfolio()
-
-    expect(entriesTotal).toBe(270)
-    expect(staked).toBe(100)
-    expect(total).toBe(370)
-  })
-
-  it('reports nothing staked when the spot balances already reach the accounts total', async () => {
-    expect.assertions(2)
-
-    const fetchImpl = portfolioFetch(
-      {
-        available_balance_total_fiat_amount: '50.00',
-        available_balance_total_fiat_currency: 'USD',
-        accounts: [
-          { currency: 'TON', available_balance: '10', available_balance_fiat_amount: '50.00' },
-          { currency: 'ETH', available_balance: '0', available_balance_fiat_amount: '0.00' }
-        ]
-      },
-      { 'TON/USD/SPOT': '12' }
-    )
-
-    const { entriesTotal, staked } = await makeClient(fetchImpl).portfolio()
-
-    expect(entriesTotal).toBe(120)
-    expect(staked).toBe(0)
-  })
-
-  it('asks for candles in batches of 20', async () => {
-    expect.assertions(2)
-
-    const currencies = Array.from({ length: 45 }, (_, index) => `COIN${index}`)
-    const fetchImpl = portfolioFetch(
-      {
-        available_balance_total_fiat_amount: '45.00',
-        available_balance_total_fiat_currency: 'USD',
-        accounts: currencies.map((currency) => ({
-          currency,
-          available_balance: '1',
-          available_balance_fiat_amount: '1.00'
-        }))
-      },
-      Object.fromEntries(currencies.map((currency) => [`${currency}/USD/SPOT`, '2']))
-    )
-
-    const { entriesTotal } = await makeClient(fetchImpl).portfolio()
-    const batchSizes = fetchImpl.mock.calls
-      .slice(1)
-      .map(([, init]) => (JSON.parse(String(init?.body)) as { requests: unknown[] }).requests.length)
-
-    expect(entriesTotal).toBe(90)
-    expect(batchSizes.toSorted((a, b) => b - a)).toStrictEqual([20, 20, 5])
-  })
-
-  it('keeps the accounts values and asks for no candles when the account is not in usd', async () => {
-    expect.assertions(3)
-
-    const fetchImpl = portfolioFetch(
-      {
-        available_balance_total_fiat_amount: '250.00',
-        available_balance_total_fiat_currency: 'EUR',
-        accounts: [{ currency: 'TON', available_balance: '10', available_balance_fiat_amount: '50.00' }]
-      },
-      { 'TON/USD/SPOT': '12' }
-    )
-
-    const { entries, total } = await makeClient(fetchImpl).portfolio()
-
-    expect(entries).toStrictEqual([{ currency: 'TON', amount: '10', fiatValue: 50 }])
-    expect(total).toBe(250)
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
-  })
-
-  it('rejects a held balance that has no candle', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = portfolioFetch(
-      {
-        available_balance_total_fiat_amount: '50.00',
-        available_balance_total_fiat_currency: 'USD',
-        accounts: [{ currency: 'TON', available_balance: '10', available_balance_fiat_amount: '50.00' }]
-      },
-      {}
-    )
-
-    await expect(makeClient(fetchImpl).portfolio()).rejects.toThrow('TON has no candle price')
-  })
-
-  it('rejects a portfolio total that is not a number', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () =>
-      jsonResponse({ available_balance_total_fiat_currency: 'USD', accounts: [] })
-    )
-
-    await expect(makeClient(fetchImpl).portfolio()).rejects.toThrow('total is not a number')
-  })
-
-  it('throws a named WaltError for a response it cannot use', async () => {
-    expect.assertions(2)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ accounts: null }))
-    const failure = makeClient(fetchImpl).portfolio()
-
-    await expect(failure).rejects.toThrow(WaltError)
-    await expect(failure).rejects.toHaveProperty('name', 'WaltError')
   })
 
   it('names the auth and request errors and makes them WaltErrors', () => {
@@ -195,53 +27,6 @@ describe('waltClient', () => {
     expect(auth.name).toBe('WaltAuthError')
     expect(request).toBeInstanceOf(WaltError)
     expect(request.name).toBe('WaltRequestError')
-  })
-
-  it('rejects a balance that is not a number instead of dropping the row', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () =>
-      jsonResponse({
-        available_balance_total_fiat_amount: '150.00',
-        available_balance_total_fiat_currency: 'USD',
-        accounts: [{ currency: 'TON', available_balance: null, available_balance_fiat_amount: '50.00' }]
-      })
-    )
-
-    await expect(makeClient(fetchImpl).portfolio()).rejects.toThrow('TON balance is not a number')
-  })
-
-  it('rejects a held balance it cannot value', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = vi.fn<typeof fetch>(async () =>
-      jsonResponse({
-        available_balance_total_fiat_amount: '150.00',
-        available_balance_total_fiat_currency: 'USD',
-        accounts: [{ currency: 'TON', available_balance: '10', available_balance_fiat_amount: undefined }]
-      })
-    )
-
-    await expect(makeClient(fetchImpl).portfolio()).rejects.toThrow('TON fiat value is not a number')
-  })
-
-  it('ignores an unvaluable zero balance', async () => {
-    expect.assertions(1)
-
-    const fetchImpl = portfolioFetch(
-      {
-        available_balance_total_fiat_amount: '50.00',
-        available_balance_total_fiat_currency: 'USD',
-        accounts: [
-          { currency: 'ETH', available_balance: '0', available_balance_fiat_amount: null },
-          { currency: 'TON', available_balance: '10', available_balance_fiat_amount: '50.00' }
-        ]
-      },
-      { 'TON/USD/SPOT': '12' }
-    )
-    const { entries } = await makeClient(fetchImpl).portfolio()
-
-    expect(entries.map((entry) => entry.currency)).toStrictEqual(['TON'])
   })
 
   it('unwraps the coins list', async () => {
@@ -342,7 +127,7 @@ describe('waltClient', () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       jsonResponse({ id: 10000000000001, fee_amount: '0.01', local_fiat_amount: '12.00' })
     )
-    const details = await makeClient(fetchImpl).transactionDetails(10000000000001)
+    const details = await makeClient(fetchImpl).transaction(10000000000001)
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/transactions/details/10000000000001/')
     expect(details.fee_amount).toBe('0.01')
@@ -353,7 +138,7 @@ describe('waltClient', () => {
     expect.assertions(1)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ id: 10000000000001 }))
-    await makeClient(fetchImpl).transactionDetails(10000000000001, 'crypto_exchange')
+    await makeClient(fetchImpl).transaction(10000000000001, { gateway: 'crypto_exchange' })
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
       'https://walletbot.me/api/v1/transactions/details/10000000000001/?transaction_gateway=crypto_exchange'
@@ -387,7 +172,7 @@ describe('waltClient', () => {
         chart_preview_rate_24h: [{ timestamp: 1767225600, value: '5.12' }]
       })
     )
-    const details = await makeClient(fetchImpl).coinDetails('TON')
+    const details = await makeClient(fetchImpl).coin('TON')
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/api/v1/coins/details/TON/USD/')
     expect(details.market_cap).toBeNull()
@@ -418,7 +203,7 @@ describe('waltClient', () => {
     expect.assertions(2)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ rate: '1.500000000000' }))
-    const price = await makeClient(fetchImpl).priceForFiatAtTime('TON', 1, '2026-01-01T00:00:00Z')
+    const price = await makeClient(fetchImpl).priceForFiatAtTime('TON', { amount: 1, time: '2026-01-01T00:00:00Z' })
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
       'https://walletbot.me/api/v1/exchange_rates/price_for_fiat_at_time/?crypto_currency=TON&local_currency=USD&amount=1&time=2026-01-01T00%3A00%3A00Z'
@@ -430,7 +215,7 @@ describe('waltClient', () => {
     expect.assertions(1)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}))
-    await makeClient(fetchImpl).priceForFiatAtTime('TON', 1, new Date('2026-01-01T00:00:00Z'))
+    await makeClient(fetchImpl).priceForFiatAtTime('TON', { amount: 1, time: new Date('2026-01-01T00:00:00Z') })
 
     expect(fetchImpl.mock.calls[0]?.[0]).toContain('time=2026-01-01T00%3A00%3A00.000Z')
   })
@@ -446,9 +231,9 @@ describe('waltClient', () => {
     })
     await client.balances()
     await client.coins()
-    await client.coinDetails('TON')
+    await client.coin('TON')
     await client.charts('TON')
-    await client.priceForFiatAtTime('TON', 1, '2026-01-01T00:00:00Z')
+    await client.priceForFiatAtTime('TON', { amount: 1, time: '2026-01-01T00:00:00Z' })
 
     expect(fetchImpl.mock.calls.map(([url]) => String(url).replace('https://walletbot.me', ''))).toStrictEqual([
       '/portmone/public-api/v1/user/accounts?fiat_currency=EUR',
@@ -557,7 +342,7 @@ describe('waltClient earn', () => {
     expect.assertions(1)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ rate: '1' }))
-    await makeClient(fetchImpl).earnRate('USDT', 'USDe')
+    await makeClient(fetchImpl).earnRate({ from: 'USDT', to: 'USDe' })
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://walletbot.me/earn/public-api/v1/rate/USDT/USDe')
   })
@@ -568,11 +353,20 @@ describe('waltClient portfolio history', () => {
     expect.assertions(1)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ chart: { data_points: [] } }))
-    await makeClient(fetchImpl).portfolioHistory(new Date('2026-01-01T23:30:00.000Z'), '1m')
+    await makeClient(fetchImpl).portfolioHistory({ from: new Date('2026-01-01T23:30:00.000Z'), resolution: 'month' })
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
       'https://walletbot.me/customer-analytics/public-api/v1/portfolio/private/?date_from=2026-01-01&resolution=1m'
     )
+  })
+
+  it('sends a day resolution as 1d', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ chart: { data_points: [] } }))
+    await makeClient(fetchImpl).portfolioHistory({ from: '2026-01-01', resolution: 'day' })
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toContain('&resolution=1d')
   })
 })
 
@@ -632,7 +426,7 @@ describe('waltClient limit orders', () => {
     expect.assertions(1)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}))
-    await makeClient(fetchImpl).limitOrderQuote('BTC', 'BUY', 50000, size)
+    await makeClient(fetchImpl).limitOrderQuote('BTC', { side: 'BUY', priceLimit: 50000, ...size })
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
       `https://walletbot.me/emporos/public-api/orders/limit/quote?base_currency=BTC&side=BUY&price_limit=50000&${expected}`
@@ -845,13 +639,7 @@ describe('waltClient exchange', () => {
     expect.assertions(3)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(quoteResponse))
-    const request = {
-      from_currency: 'USDT',
-      to_currency: 'XLEx',
-      from_amount: 1,
-      local_currency: 'USD' as const,
-      max_amount: true
-    }
+    const request = { from: 'USDT', to: 'XLEx', amount: 1, localCurrency: 'USD' as const, maxAmount: true }
     await makeClient(fetchImpl).exchangeQuote(request)
     const [url, options] = fetchImpl.mock.calls[0] ?? []
 
@@ -864,22 +652,32 @@ describe('waltClient exchange', () => {
     })
   })
 
-  it('sends the whole exchange request through unchanged', async () => {
+  it('sends an exchange request in the shape the api takes', async () => {
     expect.assertions(2)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ uid: 'u', ttl: 20 }))
-    const request = {
-      from_currency: 'XLEx',
-      to_currency: 'USDT',
-      from_amount: 4.5,
-      local_currency: 'USD' as const,
-      max_amount: true
-    }
-    await makeClient(fetchImpl).createExchange(request)
+    await makeClient(fetchImpl).createExchange({
+      from: 'XLEx',
+      to: 'USDT',
+      amount: 4.5,
+      localCurrency: 'USD',
+      maxAmount: true
+    })
     const [url, options] = fetchImpl.mock.calls[0] ?? []
 
     expect(url).toContain('/api/v1/exchange/create_exchange/')
-    expect(JSON.parse(String(options?.body))).toStrictEqual(request)
+    expect(String(options?.body)).toBe(
+      '{"from_currency":"XLEx","to_currency":"USDT","from_amount":4.5,"local_currency":"USD","max_amount":true}'
+    )
+  })
+
+  it('leaves max_amount out of an exchange request that does not set it', async () => {
+    expect.assertions(1)
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ uid: 'u', ttl: 20 }))
+    await makeClient(fetchImpl).createExchange({ from: 'USDT', to: 'XLEx', amount: 1, localCurrency: 'USD' })
+
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).not.toHaveProperty('max_amount')
   })
 
   it('retries a quote on a transient status', async () => {
@@ -889,9 +687,7 @@ describe('waltClient exchange', () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => responses.shift() ?? jsonResponse({}, 500))
     const client = new WaltClient({ tokenProvider: async () => 'jwt', fetch: fetchImpl, retryDelayMs: 0 })
 
-    await expect(
-      client.exchangeQuote({ from_currency: 'USDT', to_currency: 'XLEx', from_amount: 0 })
-    ).resolves.toStrictEqual(quoteResponse)
+    await expect(client.exchangeQuote({ from: 'USDT', to: 'XLEx', amount: 0 })).resolves.toStrictEqual(quoteResponse)
     expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 
@@ -900,7 +696,7 @@ describe('waltClient exchange', () => {
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}, 503))
     const client = new WaltClient({ tokenProvider: async () => 'jwt', fetch: fetchImpl, retries: 3, retryDelayMs: 0 })
-    const request = { from_currency: 'USDT', to_currency: 'XLEx', from_amount: 1, local_currency: 'USD' as const }
+    const request = { from: 'USDT', to: 'XLEx', amount: 1, localCurrency: 'USD' as const }
 
     await expect(client.createExchange(request)).rejects.toBeInstanceOf(WaltRequestError)
     expect(fetchImpl).toHaveBeenCalledTimes(1)

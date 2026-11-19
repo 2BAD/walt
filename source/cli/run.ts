@@ -106,7 +106,7 @@ const history = async (client: WaltClient, options: CliOptions): Promise<Report>
   else start.setUTCDate(start.getUTCDate() - 29)
   const from = options.from ?? isoDate(start)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) throw new UsageError(`--from must be YYYY-MM-DD, got ${from}`)
-  const data = await client.portfolioHistory(from, options.monthly ? '1m' : '1d')
+  const data = await client.portfolioHistory({ from, resolution: options.monthly ? 'month' : 'day' })
   const period = (dateFrom: string): string => (options.monthly ? dateFrom.slice(0, 7) : dateFrom.slice(0, 10))
   const rows = data.chart.data_points.map((point) => ({
     period: period(point.date_from),
@@ -210,7 +210,7 @@ const quote = async (client: WaltClient, args: string[]): Promise<Report> => {
   let rejection: unknown
   for (const candidate of quoteSizes(amount)) {
     try {
-      result = await client.exchangeQuote({ from_currency: from, to_currency: to, from_amount: Number(candidate) })
+      result = await client.exchangeQuote({ from, to, amount: Number(candidate) })
       size = candidate
       break
     } catch (error) {

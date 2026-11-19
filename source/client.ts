@@ -1,5 +1,5 @@
-import type { AccountsResponse, Charts, Coin, CoinDetails, FiatCurrency, PriceAtTime } from '~/api/accounts.ts'
-import type { PnlResponse, PortfolioHistory } from '~/api/analytics.ts'
+import type { Accounts, Charts, Coin, CoinDetails, FiatCurrency, PriceAtTime } from '~/api/accounts.ts'
+import type { Pnl, PortfolioHistory } from '~/api/analytics.ts'
 import type { Balances } from '~/api/balances.ts'
 import type { CandleRequest, CandleSeries } from '~/api/candles.ts'
 import type { EarnCampaign, EarnRate, EarnTransaction, EarnTransactionsPage } from '~/api/earn.ts'
@@ -25,7 +25,6 @@ import type { Transaction, TransactionDetails, TransactionGateway, TransactionsP
 import { Transport, WaltError } from '~/transport.ts'
 
 const BASE_URL = 'https://walletbot.me'
-const CANDLE_BATCH_SIZE = 20
 const TRANSACTIONS_PAGE_SIZE = 1000
 const EARN_PAGE_SIZE = 1000
 const LIMIT_ORDERS_PAGE_SIZE = 100
@@ -35,12 +34,6 @@ const calendarDate = (date: Date): string =>
   [date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()]
     .map((part) => String(part).padStart(2, '0'))
     .join('-')
-
-const decimal = (value: unknown): number | null => {
-  if (typeof value !== 'string' || value.trim() === '') return null
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
-}
 
 export type WaltClientOptions = {
   /** Called again with the rejected token after a 401, so the provider can renew it before its expiry. */
@@ -53,25 +46,8 @@ export type WaltClientOptions = {
   retryDelayMs?: number
   /** Requests allowed in flight at once. Default 4, `Infinity` removes the limit. */
   maxConcurrent?: number
-  /** Currency of the fiat values from `balances()`, `coins()`, `coinDetails()`, `charts()` and `priceForFiatAtTime()`. Default `USD`. */
+  /** Currency of the fiat values from `balances()`, `coins()`, `coin()`, `charts()` and `priceForFiatAtTime()`. Default `USD`. */
   fiatCurrency?: FiatCurrency
-}
-
-export type PortfolioEntry = {
-  currency: string
-  amount: string
-  fiatValue: number
-}
-
-export type Portfolio = {
-  /** Spot balances above zero, largest fiat value first. */
-  entries: PortfolioEntry[]
-  entriesTotal: number
-  /** `entriesTotal + staked`. */
-  total: number
-  /** What the API total counts beyond spot balances, itemised by `earnCampaigns()`. */
-  staked: number
-  fiatCurrency: string
 }
 
 export class WaltClient {
@@ -101,8 +77,8 @@ export class WaltClient {
     })
   }
 
-  accounts(): Promise<AccountsResponse> {
-    return this.transport.get<AccountsResponse>('/api/v1/accounts/')
+  accounts(): Promise<Accounts> {
+    return this.transport.get<Accounts>('/api/v1/accounts/')
   }
 
   /**
@@ -175,9 +151,11 @@ export class WaltClient {
 
   /**
    * @param id - Transaction id from a listing row.
-   * @param gateway - The row's `gateway`. Some records, such as `xstocks_dividends`, 404 without it.
+   * @param options - Filters, all optional.
+   * @param options.gateway - The row's `gateway`. Some records, such as `xstocks_dividends`, 404 without it.
    */
-  transactionDetails(id: number, gateway?: TransactionGateway | (string & {})): Promise<TransactionDetails> {
+  transaction(id: number, options: { gateway?: TransactionGateway | (string & {}) } = {}): Promise<TransactionDetails> {
+    const { gateway } = options
     const query = gateway ? `?${new URLSearchParams({ transaction_gateway: gateway }).toString()}` : ''
     return this.transport.get<TransactionDetails>(
       `/api/v1/transactions/details/${encodeURIComponent(String(id))}/${query}`
@@ -221,26 +199,29 @@ export class WaltClient {
     )
   }
 
-  earnRate(from: string, to: string): Promise<EarnRate> {
+  earnRate(pair: { from: string; to: string }): Promise<EarnRate> {
+    const { from, to } = pair
     return this.transport.get<EarnRate>(
       `/earn/public-api/v1/rate/${encodeURIComponent(from)}/${encodeURIComponent(to)}`
     )
   }
 
-  pnl(): Promise<PnlResponse> {
-    return this.transport.get<PnlResponse>('/customer-analytics/public-api/v1/pnl/assets/')
+  pnl(): Promise<Pnl> {
+    return this.transport.get<Pnl>('/customer-analytics/public-api/v1/pnl/assets/')
   }
 
   /**
    * Balance, P/L, deposits and withdrawals per day or per calendar month, plus totals for the whole range.
    *
-   * @param dateFrom - Start of the first period, as a `Date` or `YYYY-MM-DD`. A `Date` counts by its UTC day.
-   * @param resolution - `1d` for days, `1m` for months.
+   * @param range - The periods wanted.
+   * @param range.from - Start of the first period, as a `Date` or `YYYY-MM-DD`. A `Date` counts by its UTC day.
+   * @param range.resolution - Length of each period.
    */
-  portfolioHistory(dateFrom: Date | string, resolution: '1d' | '1m'): Promise<PortfolioHistory> {
+  portfolioHistory(range: { from: Date | string; resolution: 'day' | 'month' }): Promise<PortfolioHistory> {
+    const { from, resolution } = range
     const query = new URLSearchParams({
-      date_from: dateFrom instanceof Date ? calendarDate(dateFrom) : dateFrom,
-      resolution
+      date_from: from instanceof Date ? calendarDate(from) : from,
+      resolution: resolution === 'day' ? '1d' : '1m'
     })
     return this.transport.get<PortfolioHistory>(
       `/customer-analytics/public-api/v1/portfolio/private/?${query.toString()}`
@@ -276,19 +257,24 @@ export class WaltClient {
    * Fee and fill for a limit order, without placing it. Only `BUY` is accepted.
    *
    * @param baseCurrency - What is bought, from `limitOrderTokens()`.
-   * @param side - `SELL` is a valid value that the API currently rejects.
-   * @param priceLimit - Highest price to pay per unit.
-   * @param size - `amount` to spend, or `quantity` of `baseCurrency` to receive.
+   * @param order - The order, sized by `amount` to spend or `quantity` of `baseCurrency` to receive.
+   * @param order.side - `SELL` is a valid value that the API currently rejects.
+   * @param order.priceLimit - Highest price to pay per unit.
    */
   limitOrderQuote(
     baseCurrency: string,
-    side: 'BUY' | 'SELL',
-    priceLimit: number | string,
-    size: { amount: number | string } | { quantity: number | string }
+    order: { side: 'BUY' | 'SELL'; priceLimit: number | string } & (
+      | { amount: number | string }
+      | { quantity: number | string }
+    )
   ): Promise<LimitOrderQuote> {
-    const query = new URLSearchParams({ base_currency: baseCurrency, side, price_limit: String(priceLimit) })
-    if ('amount' in size) query.set('amount', String(size.amount))
-    else query.set('quantity', String(size.quantity))
+    const query = new URLSearchParams({
+      base_currency: baseCurrency,
+      side: order.side,
+      price_limit: String(order.priceLimit)
+    })
+    if ('amount' in order) query.set('amount', String(order.amount))
+    else query.set('quantity', String(order.quantity))
     return this.transport.get<LimitOrderQuote>(`/emporos/public-api/orders/limit/quote?${query.toString()}`)
   }
 
@@ -383,7 +369,7 @@ export class WaltClient {
     return responses
   }
 
-  coinDetails(currency: string): Promise<CoinDetails> {
+  coin(currency: string): Promise<CoinDetails> {
     return this.transport.get<CoinDetails>(
       `/api/v1/coins/details/${encodeURIComponent(currency)}/${encodeURIComponent(this.fiatCurrency)}/`
     )
@@ -396,12 +382,12 @@ export class WaltClient {
   }
 
   priceForFiatAtTime(
-    cryptoCurrency: string,
-    amount: number | string,
-    time: Date | string | number
+    currency: string,
+    lookup: { amount: number | string; time: Date | string | number }
   ): Promise<PriceAtTime> {
+    const { amount, time } = lookup
     const query = new URLSearchParams({
-      crypto_currency: cryptoCurrency,
+      crypto_currency: currency,
       local_currency: this.fiatCurrency,
       amount: String(amount),
       time: time instanceof Date ? time.toISOString() : String(time)
@@ -416,80 +402,29 @@ export class WaltClient {
   /**
    * Executable rate, spread included, unlike the display rates.
    *
-   * @param request - The exchange as `createExchange()` takes it. A `from_amount` of `0` returns the rate and limits only.
+   * @param request - The exchange as `createExchange()` takes it. An `amount` of `0` returns the rate and limits only.
    */
-  exchangeQuote(
-    request: Pick<ExchangeRequest, 'from_currency' | 'to_currency' | 'from_amount'>
-  ): Promise<ExchangeQuote> {
+  exchangeQuote(request: Pick<ExchangeRequest, 'from' | 'to' | 'amount'>): Promise<ExchangeQuote> {
     return this.transport.post<ExchangeQuote>('/api/v1/exchange/convert/', {
-      from_amount: request.from_amount,
-      from_currency: request.from_currency,
-      to_currency: request.to_currency
+      from_amount: request.amount,
+      from_currency: request.from,
+      to_currency: request.to
     })
   }
 
   /**
    * Moves real money and is never retried. After a failure, check balances before trying again.
    *
-   * @param request - The exchange, in the shape the API takes it.
+   * @param request - The exchange, as `exchangeQuote()` takes it plus the fiat currency to value it in.
    */
   createExchange(request: ExchangeRequest): Promise<Exchange> {
-    return this.transport.post<Exchange>('/api/v1/exchange/create_exchange/', request, 0)
-  }
-
-  /**
-   * Non-zero spot balances and the total, which also counts staked funds.
-   * A USD account is priced at the latest candle close, any other at the rates `accounts()` reports.
-   */
-  async portfolio(): Promise<Portfolio> {
-    const data = await this.accounts()
-    if (!Array.isArray(data.accounts)) {
-      throw new WaltError('accounts response carries no accounts array')
+    const body = {
+      from_currency: request.from,
+      to_currency: request.to,
+      from_amount: request.amount,
+      local_currency: request.localCurrency,
+      ...(request.maxAmount === undefined ? {} : { max_amount: request.maxAmount })
     }
-    const accountsTotal = decimal(data.available_balance_total_fiat_amount)
-    if (accountsTotal === null) {
-      throw new WaltError(`accounts total is not a number: ${String(data.available_balance_total_fiat_amount)}`)
-    }
-
-    const entries: PortfolioEntry[] = []
-    for (const account of data.accounts) {
-      const balance = decimal(account.available_balance)
-      if (balance === null) {
-        throw new WaltError(`${account.currency} balance is not a number: ${String(account.available_balance)}`)
-      }
-      if (balance <= 0) continue
-      const fiatValue = decimal(account.available_balance_fiat_amount)
-      if (fiatValue === null) {
-        throw new WaltError(
-          `${account.currency} fiat value is not a number: ${String(account.available_balance_fiat_amount)}`
-        )
-      }
-      entries.push({ currency: account.currency, amount: account.available_balance, fiatValue })
-    }
-    const staked = accountsTotal - entries.reduce((sum, entry) => sum + entry.fiatValue, 0)
-
-    if (data.available_balance_total_fiat_currency === 'USD') {
-      const requests = entries.map((entry) => ({ ticker: `${entry.currency}/USD/SPOT`, resolution: '1m', limit: 1 }))
-      const batches = Array.from({ length: Math.ceil(requests.length / CANDLE_BATCH_SIZE) }, (_, index) =>
-        requests.slice(index * CANDLE_BATCH_SIZE, (index + 1) * CANDLE_BATCH_SIZE)
-      )
-      const series = (await Promise.all(batches.map((batch) => this.candles(batch)))).flat()
-      const closes = new Map(series.map((item) => [item.ticker, decimal(item.candles.at(-1)?.c)]))
-      for (const entry of entries) {
-        const close = closes.get(`${entry.currency}/USD/SPOT`) ?? null
-        if (close === null) throw new WaltError(`${entry.currency} has no candle price`)
-        entry.fiatValue = Number(entry.amount) * close
-      }
-    }
-
-    const entriesTotal = entries.reduce((sum, entry) => sum + entry.fiatValue, 0)
-
-    return {
-      entries: entries.sort((a, b) => b.fiatValue - a.fiatValue),
-      entriesTotal,
-      total: entriesTotal + staked,
-      staked,
-      fiatCurrency: data.available_balance_total_fiat_currency
-    }
+    return this.transport.post<Exchange>('/api/v1/exchange/create_exchange/', body, 0)
   }
 }

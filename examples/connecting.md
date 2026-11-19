@@ -131,7 +131,7 @@ Lower `maxConcurrent` if you see 429 errors.
 Firing a large batch at once is safe.
 
 ```ts
-const details = await Promise.all(ids.map((id) => client.transactionDetails(id)))
+const details = await Promise.all(ids.map((id) => client.transaction(id)))
 ```
 
 ## Other token providers

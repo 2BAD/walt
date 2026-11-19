@@ -115,7 +115,7 @@ export type Account = {
   has_transactions: boolean
 }
 
-export type AccountsResponse = {
+export type Accounts = {
   available_balance_total_fiat_amount: string
   available_balance_total_fiat_currency: string
   accounts: Account[]

@@ -7,7 +7,7 @@ const coins = await client.coins()
 
 ## Fiat currency
 
-`balances()`, `coins()`, `coinDetails()`, `charts()` and `priceForFiatAtTime()` use the client's `fiatCurrency`. The default is `USD`.
+`balances()`, `coins()`, `coin()`, `charts()` and `priceForFiatAtTime()` use the client's `fiatCurrency`. The default is `USD`.
 
 `accounts()` and `portfolio()` ignore it and report in the currency the account uses.
 
@@ -27,9 +27,9 @@ const { day, week, month, year, all } = await client.charts('TON')
 ## `priceForFiatAtTime()`
 
 ```ts
-const then = await client.priceForFiatAtTime('TON', 100, new Date('2026-01-01'))
+const then = await client.priceForFiatAtTime('TON', { amount: 100, time: new Date('2026-01-01') })
 ```
 
-## `coinDetails()`
+## `coin()`
 
 Description, networks and trading hours of one coin.

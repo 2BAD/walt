@@ -1,11 +1,7 @@
 # Exchange
 
 ```ts
-const { rate, min_amount, max_amount } = await client.exchangeQuote({
-  from_currency: 'USDT',
-  to_currency: 'NVDAx',
-  from_amount: 0
-})
+const { rate, min_amount, max_amount } = await client.exchangeQuote({ from: 'USDT', to: 'NVDAx', amount: 0 })
 ```
 
 ## Pairs
@@ -16,31 +12,26 @@ const { rate, min_amount, max_amount } = await client.exchangeQuote({
 
 `rate` is the price you would get, spread included. Use it for price triggers instead of the rate from `coins()`.
 
-`from_amount` must be between `min_amount` and `max_amount`. When selling, `max_amount` is your balance.
+`amount` must be between `min_amount` and `max_amount`. When selling, `max_amount` is your balance.
 
 Pass `0` to get the rate and limits alone.
 
 ## `createExchange()`
 
 ```ts
-const filled = await client.createExchange({
-  from_currency: 'USDT',
-  to_currency: 'NVDAx',
-  from_amount: 25,
-  local_currency: 'USD'
-})
+const filled = await client.createExchange({ from: 'USDT', to: 'NVDAx', amount: 25, localCurrency: 'USD' })
 ```
 
 This moves real money at once. There is no confirm step.
 
 If it throws, check the balances before trying again.
 
-Set `max_amount: true` to sell the whole balance.
+Set `maxAmount: true` to sell the whole balance.
 
 ## Limit orders
 
 ```ts
-const quote = await client.limitOrderQuote('NVDAx', 'BUY', 170, { amount: 25 })
+const quote = await client.limitOrderQuote('NVDAx', { side: 'BUY', priceLimit: 170, amount: 25 })
 // quote.quantity '0.147058', quote.fee '0.05'
 ```
 

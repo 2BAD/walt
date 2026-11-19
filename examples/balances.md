@@ -1,7 +1,9 @@
 # Balances
 
 ```ts
-const { entries, total, fiatCurrency } = await client.portfolio()
+import { portfolio } from '@2bad/walt'
+
+const { entries, total, fiatCurrency } = await portfolio(client)
 
 for (const { currency, amount, fiatValue } of entries) {
   console.log(currency, amount, fiatValue) // TON 120.5 381.2
@@ -17,7 +19,7 @@ A USD account is valued at the latest candle close. Any other fiat currency uses
 `total` is the figure the Walt app shows. Staked funds count in `total` but have no entry.
 
 ```ts
-const { total, entriesTotal, staked } = await client.portfolio()
+const { total, entriesTotal, staked } = await portfolio(client)
 // 1250.4 1200.1 50.3
 ```
 
@@ -72,10 +74,10 @@ The amount of an active order is in no balance and not in `total`.
 
 ## `portfolioHistory()`
 
-Balance, profit and loss, deposits and withdrawals per day (`1d`) or per calendar month (`1m`).
+Balance, profit and loss, deposits and withdrawals per day or per calendar month.
 
 ```ts
-const { chart, total_period_details } = await client.portfolioHistory('2026-01-01', '1m')
+const { chart, total_period_details } = await client.portfolioHistory({ from: '2026-01-01', resolution: 'month' })
 
 for (const period of chart.data_points) {
   console.log(period.date_from, period.close_amount_fiat, period.total_pnl) // 2026-01-01T00:00:00Z 1250.40 12.75

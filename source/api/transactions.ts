@@ -143,11 +143,11 @@ export type NormalizedTransaction = {
 }
 
 /**
- * Splits a `transactionDetails()` record into what entered the wallet, what left it, and the fee.
+ * Splits a `transaction()` record into what entered the wallet, what left it, and the fee.
  * A `deposit` of USDT paired with BTC is a sale of BTC. Listing rows lack `pair_transaction_amount`,
  * so they cannot be normalised.
  *
- * @param details - A `transactionDetails()` record.
+ * @param details - A `transaction()` record.
  */
 export const normalizeTransaction = (details: TransactionDetails): NormalizedTransaction => {
   const main = { currency: details.crypto_currency, amount: details.crypto_amount }

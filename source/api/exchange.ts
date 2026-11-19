@@ -4,7 +4,7 @@ import type { FiatCurrency } from '~/api/accounts.ts'
 export type AvailableExchanges = Record<string, string[]>
 
 /**
- * Amounts are numbers, not decimal strings. `min_amount` and `max_amount` bound `from_amount`;
+ * Amounts are numbers, not decimal strings. `min_amount` and `max_amount` bound the requested amount;
  * `max_amount` is the balance when selling and the platform limit when buying.
  */
 export type ExchangeQuote = {
@@ -18,12 +18,12 @@ export type ExchangeQuote = {
 }
 
 export type ExchangeRequest = {
-  from_currency: string
-  to_currency: string
-  from_amount: number
-  local_currency: FiatCurrency
-  /** Set when `from_amount` is the whole balance. */
-  max_amount?: boolean
+  from: string
+  to: string
+  amount: number
+  localCurrency: FiatCurrency
+  /** Set when `amount` is the whole balance. */
+  maxAmount?: boolean
 }
 
 /** `ttl` is in seconds. */

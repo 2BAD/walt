@@ -10,12 +10,12 @@ const tonRows = await client.transactions({ currency: 'TON' })
 
 Newest first.
 
-## `transactionDetails()`
+## `transaction()`
 
 Fees, rates, both sides of a conversion and the on-chain hash.
 
 ```ts
-const details = await client.transactionDetails(row.id, row.gateway)
+const details = await client.transaction(row.id, { gateway: row.gateway })
 ```
 
 Pass the row's `gateway`. Some records, such as `xstocks_dividends`, are a 404 without it.
@@ -24,7 +24,7 @@ Pass the row's `gateway`. Some records, such as `xstocks_dividends`, are a 404 w
 
 ```ts
 const rows = await client.transactions()
-const details = await Promise.all(rows.map((row) => client.transactionDetails(row.id, row.gateway)))
+const details = await Promise.all(rows.map((row) => client.transaction(row.id, { gateway: row.gateway })))
 ```
 
 The client runs at most `maxConcurrent` lookups at once.

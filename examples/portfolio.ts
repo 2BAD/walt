@@ -1,4 +1,4 @@
-import { TelegramTokenSource, WaltClient } from '@2bad/walt'
+import { portfolio, TelegramTokenSource, WaltClient } from '@2bad/walt'
 
 const session = process.env['TG_SESSION']
 const apiId = Number(process.env['TG_API_ID'])
@@ -11,7 +11,7 @@ if (!session || !apiId || !apiHash) {
 const source = new TelegramTokenSource({ session, apiId, apiHash })
 const client = new WaltClient({ tokenProvider: (rejected) => source.token(rejected) })
 
-const { entries, entriesTotal, total, staked, fiatCurrency } = await client.portfolio()
+const { entries, entriesTotal, total, staked, fiatCurrency } = await portfolio(client)
 const line = (label: string, amount: string, value: number): void =>
   console.log(`${label.padEnd(8)} ${amount.padStart(20)}  ${value.toFixed(2).padStart(12)} ${fiatCurrency}`)
 

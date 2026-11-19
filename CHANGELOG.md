@@ -21,10 +21,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** `limitOrders()` now filters by `statuses` instead of `status`. Rename the option.
 - **Breaking:** `earnCampaigns()` now returns the campaigns as an array. Drop the `campaigns` destructuring.
 - **Breaking:** `perpContracts()` now takes `{ contractId }` instead of a bare id. Wrap the id in an object.
-- **Breaking:** `balances()`, `coins()`, `coinDetails()`, `charts()` and `priceForFiatAtTime()` no longer take a fiat currency. Set `fiatCurrency` on `WaltClient` instead.
-- **Breaking:** `transactionDetails()` now takes only a numeric id. Pass the `id` of a transaction row.
+- **Breaking:** `balances()`, `coins()`, `coin()`, `charts()` and `priceForFiatAtTime()` no longer take a fiat currency. Set `fiatCurrency` on `WaltClient` instead.
+- **Breaking:** Renamed `transactionDetails()` to `transaction()`, which takes a numeric id and `{ gateway }`. Call `transaction(row.id, { gateway: row.gateway })`.
+- **Breaking:** Renamed `coinDetails()` to `coin()`. Call `coin('TON')`.
 - **Breaking:** `WaltClient` now throws `TypeError` instead of `WaltAuthError` without a `tokenProvider`. Catch `TypeError` for that case.
-- **Breaking:** Renamed `quote()` to `exchangeQuote()`, which takes the fields `createExchange()` takes. Pass `{ from_currency, to_currency, from_amount }`.
+- **Breaking:** Renamed `quote()` to `exchangeQuote()`, which takes `{ from, to, amount }`. Rename the fields.
+- **Breaking:** `createExchange()` now takes `{ from, to, amount, localCurrency, maxAmount }`. Rename the fields.
+- **Breaking:** `limitOrderQuote()` now takes the currency and `{ side, priceLimit, amount }` or `{ side, priceLimit, quantity }`. Move the arguments into one object.
+- **Breaking:** `portfolioHistory()` now takes `{ from, resolution }` with `day` or `month`. Replace `'1d'` and `'1m'`.
+- **Breaking:** `priceForFiatAtTime()` now takes the currency and `{ amount, time }`. Move the amount and time into one object.
+- **Breaking:** `earnRate()` now takes `{ from, to }`. Wrap both currencies in an object.
+- **Breaking:** Renamed the `AccountsResponse` and `PnlResponse` types to `Accounts` and `Pnl`. Update the type imports.
+- **Breaking:** `portfolio()` is now a function that takes the client. Call `portfolio(client)` instead of `client.portfolio()`.
 - Unusable responses and failed Telegram sign-ins now throw a `WaltError` instead of a plain `Error`
 - A refresh request that gets no response now throws `WaltRequestError` with status `0`
 - `WaltAuthError` and `WaltRequestError` now show their own name in stack traces
@@ -33,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Breaking:** Removed `allTransactions()`, `allAccountTransactions()` and `allEarnCampaignTransactions()`. Use `transactions()` and `earnCampaignTransactions()`.
 - **Breaking:** Removed the `TransactionsPage`, `LimitOrdersPage`, `PerpOrdersPage`, `EarnTransactionsPage` and `EarnCampaignsResponse` types.
-- **Breaking:** Removed `detailsFor()`. Call `transactionDetails()` for each row with `Promise.all`.
+- **Breaking:** Removed `detailsFor()`. Call `transaction()` for each row with `Promise.all`.
 - **Breaking:** Removed `frozenBalances()` and `unconfirmedTransactions()`, whose row shape was never known.
 
 ### Fixed
