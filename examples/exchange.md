@@ -26,7 +26,7 @@ This moves real money at once. There is no confirm step.
 
 If it throws, check the balances before trying again.
 
-Set `maxAmount: true` to sell the whole balance.
+Set `wholeBalance: true` to sell the whole balance.
 
 ## Limit orders
 

@@ -203,7 +203,7 @@ describe('waltClient', () => {
     expect.assertions(2)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ rate: '1.500000000000' }))
-    const price = await makeClient(fetchImpl).priceForFiatAtTime('TON', { amount: 1, time: '2026-01-01T00:00:00Z' })
+    const price = await makeClient(fetchImpl).priceAtTime('TON', { amount: 1, time: '2026-01-01T00:00:00Z' })
 
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
       'https://walletbot.me/api/v1/exchange_rates/price_for_fiat_at_time/?crypto_currency=TON&local_currency=USD&amount=1&time=2026-01-01T00%3A00%3A00Z'
@@ -215,7 +215,7 @@ describe('waltClient', () => {
     expect.assertions(1)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({}))
-    await makeClient(fetchImpl).priceForFiatAtTime('TON', { amount: 1, time: new Date('2026-01-01T00:00:00Z') })
+    await makeClient(fetchImpl).priceAtTime('TON', { amount: 1, time: new Date('2026-01-01T00:00:00Z') })
 
     expect(fetchImpl.mock.calls[0]?.[0]).toContain('time=2026-01-01T00%3A00%3A00.000Z')
   })
@@ -233,7 +233,7 @@ describe('waltClient', () => {
     await client.coins()
     await client.coin('TON')
     await client.charts('TON')
-    await client.priceForFiatAtTime('TON', { amount: 1, time: '2026-01-01T00:00:00Z' })
+    await client.priceAtTime('TON', { amount: 1, time: '2026-01-01T00:00:00Z' })
 
     expect(fetchImpl.mock.calls.map(([url]) => String(url).replace('https://walletbot.me', ''))).toStrictEqual([
       '/portmone/public-api/v1/user/accounts?fiat_currency=EUR',
@@ -639,7 +639,7 @@ describe('waltClient exchange', () => {
     expect.assertions(3)
 
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(quoteResponse))
-    const request = { from: 'USDT', to: 'XLEx', amount: 1, localCurrency: 'USD' as const, maxAmount: true }
+    const request = { from: 'USDT', to: 'XLEx', amount: 1, localCurrency: 'USD' as const, wholeBalance: true }
     await makeClient(fetchImpl).exchangeQuote(request)
     const [url, options] = fetchImpl.mock.calls[0] ?? []
 
@@ -661,7 +661,7 @@ describe('waltClient exchange', () => {
       to: 'USDT',
       amount: 4.5,
       localCurrency: 'USD',
-      maxAmount: true
+      wholeBalance: true
     })
     const [url, options] = fetchImpl.mock.calls[0] ?? []
 

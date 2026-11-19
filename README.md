@@ -82,13 +82,13 @@ type WaltClient = {
   coins(): Promise<Coin[]>
   coin(currency: string): Promise<CoinDetails>
   charts(currency: string): Promise<Charts>
-  priceForFiatAtTime(currency: string, lookup: { amount: number | string; time: Date | string | number }): Promise<PriceAtTime>
+  priceAtTime(currency: string, lookup: { amount: number | string; time: Date | string | number }): Promise<PriceAtTime>
   localCurrency(): Promise<FiatCurrency>
   candles(requests: CandleRequest[]): Promise<CandleSeries[]>
 
   availableExchanges(): Promise<AvailableExchanges>
   exchangeQuote(request: { from: string; to: string; amount: number }): Promise<ExchangeQuote>
-  createExchange(request: { from: string; to: string; amount: number; localCurrency: FiatCurrency; maxAmount?: boolean }): Promise<Exchange> // moves real money, never retried
+  createExchange(request: { from: string; to: string; amount: number; localCurrency: FiatCurrency; wholeBalance?: boolean }): Promise<Exchange> // moves real money, never retried
 
   limitOrders(options?: { statuses?: string[] }): Promise<LimitOrder[]>
   limitOrder(id: string): Promise<LimitOrder>

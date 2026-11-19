@@ -23,7 +23,7 @@ export type ExchangeRequest = {
   amount: number
   localCurrency: FiatCurrency
   /** Set when `amount` is the whole balance. */
-  maxAmount?: boolean
+  wholeBalance?: boolean
 }
 
 /** `ttl` is in seconds. */

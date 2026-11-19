@@ -46,7 +46,7 @@ export type WaltClientOptions = {
   retryDelayMs?: number
   /** Requests allowed in flight at once. Default 4, `Infinity` removes the limit. */
   maxConcurrent?: number
-  /** Currency of the fiat values from `balances()`, `coins()`, `coin()`, `charts()` and `priceForFiatAtTime()`. Default `USD`. */
+  /** Currency of the fiat values from `balances()`, `coins()`, `coin()`, `charts()` and `priceAtTime()`. Default `USD`. */
   fiatCurrency?: FiatCurrency
 }
 
@@ -381,7 +381,7 @@ export class WaltClient {
     )
   }
 
-  priceForFiatAtTime(
+  priceAtTime(
     currency: string,
     lookup: { amount: number | string; time: Date | string | number }
   ): Promise<PriceAtTime> {
@@ -423,7 +423,7 @@ export class WaltClient {
       to_currency: request.to,
       from_amount: request.amount,
       local_currency: request.localCurrency,
-      ...(request.maxAmount === undefined ? {} : { max_amount: request.maxAmount })
+      ...(request.wholeBalance === undefined ? {} : { max_amount: request.wholeBalance })
     }
     return this.transport.post<Exchange>('/api/v1/exchange/create_exchange/', body, 0)
   }
