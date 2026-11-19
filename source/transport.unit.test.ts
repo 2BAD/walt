@@ -77,11 +77,11 @@ describe('transport headers', () => {
     await makeTransport(fetchImpl).get(ACCOUNTS)
     const headers = headersOf(fetchImpl)
 
-    expect(headers['user-agent']).toContain('Chrome/156.0.0.0')
-    expect(headers['sec-ch-ua']).toContain('"Google Chrome";v="156"')
+    expect(headers['user-agent']).toContain('Chrome/157.0.0.0')
+    expect(headers['sec-ch-ua']).toContain('"Google Chrome";v="157"')
     expect(headers['accept']).toBe('application/json')
     expect(headers['sec-fetch-site']).toBe('same-origin')
-    expect(headers['baggage']).toContain('sentry-release=10.0.84666')
+    expect(headers['baggage']).toContain('sentry-release=10.0.87689')
     expect(headers).not.toHaveProperty('sec-fetch-storage-access')
   })
 

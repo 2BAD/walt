@@ -250,7 +250,7 @@ describe('telegramTokenSource', () => {
         origin: 'https://walletbot.me',
         referer: 'https://walletbot.me/',
         'sec-fetch-mode': 'cors',
-        'user-agent': expect.stringContaining('Chrome/156.0.0.0'),
+        'user-agent': expect.stringContaining('Chrome/157.0.0.0'),
         'x-wallet-tz-name': Intl.DateTimeFormat().resolvedOptions().timeZone,
         'x-wallet-tz-offset': String(-new Date().getTimezoneOffset())
       })
